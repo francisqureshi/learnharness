@@ -24,6 +24,14 @@ Sharing a saved demo means reopening the generated HTML artifact. Internal slide
 
 ## Delivery slices and gates
 
+### First-release provider and Mac acceptance gate
+
+The owner selected their **existing ChatGPT subscription** for the first shared-server release. API-key-only success is therefore insufficient. Validate server-owned subscription authentication, refresh, foreground teaching, background demo work with the owner's consent settings, and recovery after restart. Preserve the existing no-silent-API-billing-fallback behaviour. Do not copy the Mac's credential files or assume subscription access has been verified merely because offline adapter imports passed.
+
+The Mac is the primary client and a first-class Mac experience is a release requirement. Bring the remote Electron spike from slice E forward alongside the initial backend work: demonstrate a complete lesson, demo, dictation path (separate Deepgram credentials), and sleep/reconnect cycle before substantial iPhone work. Production persistence and backup gates remain required before migrating or relying on real learning data.
+
+ChatGPT sign-in currently expects a loopback callback on hws. The initial authentication workflow still needs to be chosen and validated: server-local sign-in or a deliberately designed remote callback flow. That is now an early feasibility gate, not a deferred optional provider enhancement. Existing subscription entitlement and available models must be verified through the supported connection; this plan makes no claim that every auxiliary service is included.
+
 ### A. Package the backend in Nix — first implementation target (#2)
 
 Proposed files: a small flake entry, `nix/package.nix`, and a package-specific smoke harness. The final names/options should be reviewed with the module interface.
@@ -112,10 +120,10 @@ No paid model calls, credential changes, data migration, or server restarts were
 
 ## Decisions to resolve before dependent work
 
-1. Which provider connection must work first? An asynchronous question has been sent to the owner. Record the answer in the tracker; no answer means still open.
+1. **Resolved provider: existing ChatGPT subscription.** Still choose and validate the server-owned login/callback workflow and foreground/background use; API-key-only delivery does not satisfy the requirement.
 2. Fresh state or migration from the Mac? This governs cutover and data tests.
 3. Backup destination/retention and acceptable brief downtime for a consistent snapshot.
 4. Should unsubmitted answer/composer drafts follow the learner to another device?
 5. Preview Mac identity/update policy and supported remote connection UX.
 
-Independent packaging research can proceed while these are open; migration, provider-specific sign-in changes, and product behaviour must wait for the relevant decision. The next reviewable deliverable should be the Nix package/module proposal and its scratch-state validation, before any production cutover.
+Independent packaging work can proceed while these are open; migration, login/callback implementation, and product behaviour must wait for their relevant decisions. The next reviewable deliverable should pair the Nix package/module proposal with early subscription and actual Mac-shell validation, using scratch state before any production cutover.
