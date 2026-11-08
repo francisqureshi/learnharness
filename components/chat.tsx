@@ -1,5 +1,7 @@
 "use client";
 
+import { isPhoneLayout } from "@/components/phone-layout";
+
 import { createContext, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatSession } from "@/components/session";
 import { visibleQueuedSteers } from "@/components/session-core";
@@ -723,7 +725,7 @@ export function Chat({
 			dictationWasActiveRef.current = true;
 		} else if (dictationWasActiveRef.current) {
 			dictationWasActiveRef.current = false;
-			composerInputRef.current?.focus();
+			if (!isPhoneLayout()) composerInputRef.current?.focus();
 		}
 	}, [dictation.active]);
 

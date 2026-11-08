@@ -602,3 +602,23 @@ body {
 	outline: 1px solid var(--border);
 	border-radius: 0.25rem;
 }
+
+/* Personal phone preview: desktop/Electron never receives lh-phone. The
+   visual viewport keeps the composer above the on-screen keyboard. */
+html.lh-phone, .lh-phone body { overflow: hidden; }
+.lh-phone .lh-app-shell {
+	position: fixed;
+	inset: 0;
+	height: var(--lh-phone-height, 100dvh);
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.lh-phone .lh-app-shell .h-dvh { height: 100%; }
+.lh-phone [data-phone-drawer] {
+	position: absolute;
+	top: env(safe-area-inset-top);
+	bottom: env(safe-area-inset-bottom);
+	left: env(safe-area-inset-left);
+	z-index: 50;
+	max-width: calc(100% - 3rem);
+}
+.lh-phone-backdrop { position: absolute; inset: 0; z-index: 40; background: rgb(0 0 0 / 50%); }

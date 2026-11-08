@@ -1,5 +1,7 @@
 "use client";
 
+import { isPhoneLayout } from "@/components/phone-layout";
+
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Conversation, ConversationContent, ConversationEmptyState } from "@/components/ai-elements/conversation";
@@ -145,7 +147,7 @@ export function DraftShell({
 			dictationWasActiveRef.current = true;
 		} else if (dictationWasActiveRef.current) {
 			dictationWasActiveRef.current = false;
-			composerInputRef.current?.focus();
+			if (!isPhoneLayout()) composerInputRef.current?.focus();
 		}
 	}, [dictation.active]);
 	return (

@@ -1,5 +1,7 @@
 "use client";
 
+import { isPhoneLayout } from "@/components/phone-layout";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CornerDownLeftIcon, DumbbellIcon } from "lucide-react";
@@ -83,7 +85,7 @@ export function Home({
 			dictationWasActiveRef.current = true;
 		} else if (dictationWasActiveRef.current) {
 			dictationWasActiveRef.current = false;
-			topicInputRef.current?.focus();
+			if (!isPhoneLayout()) topicInputRef.current?.focus();
 		}
 	}, [dictation.active]);
 

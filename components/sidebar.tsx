@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePhoneLayout } from "@/components/phone-layout";
 import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
 import { DeleteSessionDialog } from "@/components/delete-session-dialog";
@@ -87,9 +88,11 @@ declare global {
 	}
 }
 
-const SidebarContext = createContext<{ open: boolean; toggle: () => void }>({
+const SidebarContext = createContext<{ open: boolean; toggle: () => void; phone: boolean; closePhone: () => void }>({
 	open: false,
 	toggle: () => {},
+	phone: false,
+	closePhone: () => {},
 });
 
 export function useSidebar() {
@@ -97,6 +100,26 @@ export function useSidebar() {
 }
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
+	const phone = usePhoneLayout();
+	const [phoneOpen, setPhoneOpen] = useState(false);
+	const closePhone = useCallback(() => setPhoneOpen(false), []);
+	const pathname = usePathname();
+	useEffect(() => { closePhone(); }, [pathname, phone, closePhone]);
+	useEffect(() => {
+		if (!phone) return;
+		const html = document.documentElement;
+		html.classList.add("lh-phone");
+		const resize = () => html.style.setProperty("--lh-phone-height", `${window.visualViewport?.height ?? window.innerHeight}px`);
+		resize();
+		window.visualViewport?.addEventListener("resize", resize);
+		window.addEventListener("resize", resize);
+		return () => {
+			html.classList.remove("lh-phone");
+			html.style.removeProperty("--lh-phone-height");
+			window.visualViewport?.removeEventListener("resize", resize);
+			window.removeEventListener("resize", resize);
+		};
+	}, [phone]);
 	useEffect(() => {
 		const bridge = window.lh?.chatgpt;
 		if (!bridge) return;
@@ -151,6 +174,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const toggle = useCallback(() => {
+		if (phone) { setPhoneOpen((value) => !value); return; }
 		// Opening while narrow (auto-closed, or the user's own closed-at-
 		// narrow): ask the shell to widen to the threshold — the resize
 		// listener flips `narrow` and the sidebar appears. The preference
@@ -166,7 +190,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 			localStorage.setItem(STORAGE_KEY, v ? "0" : "1");
 			return !v;
 		});
-	}, [narrow, open]);
+	}, [narrow, open, phone]);
 
 	// ⌘B: the global shortcut dispatches kbdEventForAction("toggle-sidebar")
 	// and the context answers on exactly that name — the shared spelling
@@ -182,9 +206,9 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	}, [toggle]);
 
 	return (
-		<SidebarContext.Provider value={{ open: open && !narrow, toggle }}>
+		<SidebarContext.Provider value={{ open: phone ? phoneOpen : open && !narrow, toggle, phone, closePhone }}>
 			{/* transitions gated on mount: no slide-in flash on page load */}
-			<div className={cn("flex h-dvh", mounted && "[&_.sidebar-motion]:transition-[width,margin,opacity]")}>{children}</div>
+			<div className={cn("lh-app-shell flex h-dvh", mounted && "[&_.sidebar-motion]:transition-[width,margin,opacity]")}>{children}</div>
 		</SidebarContext.Provider>
 	);
 }
@@ -393,7 +417,27 @@ export type SessionKindFilter = "teach" | "all" | "practice";
 const KIND_FILTER_KEY = "lh:session-kind-filter";
 
 function SessionsSidebar() {
-	const { open, toggle } = useSidebar();
+	const { open, toggle, phone, closePhone } = useSidebar();
+	const drawerRef = useRef<HTMLElement>(null);
+	useEffect(() => {
+		if (!phone || !open) return;
+		const previous = document.activeElement;
+		const drawer = drawerRef.current;
+		drawer?.querySelector<HTMLButtonElement>('[aria-label="Close sidebar"]')?.focus();
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closePhone(); }
+			if (event.key !== "Tab") return;
+			const items = Array.from(drawer?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]') ?? []).filter((element) => element.getClientRects().length > 0);
+			const first = items[0], last = items.at(-1);
+			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+			else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+		};
+		document.addEventListener("keydown", onKey, true);
+		return () => {
+			document.removeEventListener("keydown", onKey, true);
+			if (previous instanceof HTMLButtonElement && previous.isConnected) previous.focus();
+		};
+	}, [phone, open, closePhone]);
 	const [chats, setChats] = useState<ChatListItem[] | null>(null);
 	const [query, setQuery] = useState("");
 	const [kindFilter, setKindFilter] = useState<SessionKindFilter>("all");
@@ -414,8 +458,9 @@ function SessionsSidebar() {
 	   message is sent (and that message becomes its title). Search: a
 	   client-side filter over the poll snapshot — no server round trip. */
 	const newSession = useCallback(() => {
+		closePhone();
 		router.push("/chat/new");
-	}, [router]);
+	}, [router, closePhone]);
 
 	/* FUZZY (owner round 8, 2026-10-05): subsequence match ranked by
 	 * fuzzyScore — prefix beats word-boundary beats scattered. Empty query
@@ -650,6 +695,12 @@ function SessionsSidebar() {
 
 	return (
 		<aside
+			ref={drawerRef}
+			data-phone-drawer={phone ? "true" : undefined}
+			role={phone ? "dialog" : undefined}
+			aria-label={phone ? "Sessions" : undefined}
+			aria-modal={phone && open ? true : undefined}
+			inert={phone && !open ? true : undefined}
 			className={cn("sidebar-motion shrink-0 overflow-hidden duration-200", open ? "w-72" : "w-0")}
 			aria-hidden={!open}
 		>
@@ -676,6 +727,7 @@ function SessionsSidebar() {
 					>
 						<Link
 							href="/"
+							onClick={closePhone}
 							aria-label="Home"
 							className="lh-no-drag flex size-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
 						>
@@ -713,7 +765,7 @@ function SessionsSidebar() {
 					<button
 						type="button"
 						data-testid="new-session-practice"
-						onClick={() => router.push("/chat/new?mode=practice")}
+						onClick={() => { closePhone(); router.push("/chat/new?mode=practice"); }}
 						className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 					>
 						<DumbbellIcon className="size-3" />
@@ -832,6 +884,7 @@ function SessionsSidebar() {
 									active={pathname === `/chat/${c.id}`}
 									kbdSelected={i === kbdIndex}
 									onOpen={() => {
+										closePhone();
 										setKbdIndex(null);
 										router.push(`/chat/${c.id}`);
 									}}
@@ -856,7 +909,7 @@ function SessionsSidebar() {
 						<Hint label="Settings" action="open-settings" side="right">
 							<button
 								type="button"
-								onClick={() => openSettings()}
+								onClick={() => { closePhone(); openSettings(); }}
 								data-testid="settings-entry"
 								className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 							>
@@ -947,10 +1000,12 @@ function SessionsSidebar() {
 
 /** The app frame: sidebar inline + content. Rendered once in the root layout. */
 export function AppShell({ children }: { children: React.ReactNode }) {
+	const { phone, open, closePhone } = useSidebar();
 	return (
 		<SettingsDialogProvider>
+			{phone && open && <button type="button" aria-label="Close sidebar backdrop" className="lh-phone-backdrop" onClick={closePhone} tabIndex={-1} />}
 			<SessionsSidebar />
-			<FilePathDropZone className="relative min-w-0 flex-1">{children}</FilePathDropZone>
+			<FilePathDropZone inert={phone && open} className="relative min-w-0 flex-1">{children}</FilePathDropZone>
 			{/* The single document-level keydown listener (keyboard wave A) —
 			    after the content in the tree, but it's window-level so order only
 			    matters for the events it dispatches, never for DOM priority. */}
