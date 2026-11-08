@@ -2,6 +2,7 @@
 let
   cfg = config.services.learnharness;
 in {
+  imports = [ ./backup.nix ];
   options.services.learnharness = {
     enable = lib.mkEnableOption "the private LearnHarness backend";
     package = lib.mkOption {
