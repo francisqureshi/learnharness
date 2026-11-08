@@ -24,6 +24,7 @@
     packages.${system}.default = pkgs.callPackage ./nix/package.nix { };
     nixosModules.default = import ./nix/module.nix;
     checks.${system} = {
+    service = import ./nix/service-test.nix { inherit pkgs; package = self.packages.${system}.default; };
     package = self.packages.${system}.default;
     module =
       assert service.environment.HOSTNAME == "127.0.0.1";
