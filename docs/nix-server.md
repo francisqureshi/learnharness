@@ -74,6 +74,10 @@ sudo bash /home/fq/Projects/learnharness-nix/scripts/deploy-hws.sh \
 
 The helper refuses active work or existing permanent state. It stops the validation user service, saves a private pre-cutover snapshot, copies its lessons/settings/credentials into system-service state, activates the built NixOS generation and checks saved session IDs, settings and the ChatGPT connection. On failure it attempts to restore the previous generation and validation service, carrying back any changed state to preserve token rotation. The original pre-cutover snapshot is retained separately from daily snapshot pruning. Do not submit new work during cutover. This command needs a human sudo authentication on hws; no password belongs in chat.
 
+The validation service must have a persistent user-unit file (disabled at boot) so NixOS user-manager reloads cannot discard the rollback target. Recovery attempts the validation restart even when restoring the previous NixOS generation reports an unrelated unit error. A retry after rollback uses `--retry-after-rollback`: it archives leftover permanent state before copying the currently running validation state. It never overwrites that leftover state in place.
+
+On hws, `wg-quick-wg0.service` conflicts with an existing `wfh` route. The helper tolerates NixOS exit status 4 only if wg0 was already the sole failed unit, remains the sole failed unit, and the target generation actually became current. All LearnHarness health/data checks still run; any new unit failure or other activation error triggers rollback. No VPN routes are modified.
+
 ## Remaining release gates
 
 - Apply the reviewed host integration and verify its private HTTPS route. VM coverage does not replace a deployment check on hws.
