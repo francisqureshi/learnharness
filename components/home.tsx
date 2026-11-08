@@ -30,6 +30,19 @@ import type { TurnUsage } from "@/src/core";
  */
 export function Home({ initialConfigured, rendering = true, showGraphOnPhone = false }: { initialConfigured: boolean; rendering?: boolean; showGraphOnPhone?: boolean }) {
 	const phone = usePhoneLayout();
+	const router = useRouter();
+	useEffect(() => {
+		if (!phone || showGraphOnPhone) return;
+		let cancelled = false;
+		// Only a fresh document launch resumes; returning Home stays Home.
+		if (document.documentElement.dataset.lhResumeChecked) return;
+		void fetch("/api/resume").then(r => r.ok ? r.json() : null).then(data => {
+			if (cancelled) return;
+			document.documentElement.dataset.lhResumeChecked = "true";
+			if (typeof data?.chatId === "string" && /^[A-Za-z0-9_-]+$/.test(data.chatId)) router.replace(`/chat/${data.chatId}`);
+		}).catch(() => {});
+		return () => { cancelled = true; };
+	}, [phone, showGraphOnPhone, router]);
 	return phone && !showGraphOnPhone ? <NewSession initialConfigured={initialConfigured} /> : <GraphHome initialConfigured={initialConfigured} rendering={rendering} />;
 }
 

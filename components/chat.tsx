@@ -59,6 +59,8 @@ import { ArrowRightIcon, DumbbellIcon, WaypointsIcon } from "lucide-react";
 import type { PlanBlockData } from "@/src/core";
 import { QuestionDock } from "@/components/question-dock";
 import { SessionFind } from "@/components/session-find";
+import { readLessonLocal, writeLessonLocal } from "./lesson-local";
+import { LessonReadingPosition } from "./lesson-reading-position";
 import { SessionMessageNavigation } from "@/components/session-navigation";
 import { PracticeDock } from "@/components/practice-dock";
 import { ThinkingCard, type PracticeThinkingData } from "@/components/practice-cards";
@@ -260,10 +262,14 @@ export function Chat({
 	// (core/view.ts projectView); sends are ONE explicit input event each
 	// ({chatId, input} — the stash indirection died with the SDK), and the
 	// turn stream is the VERBATIM AgentEvent passthrough the server emits.
-	const { messages, nativeMessages, hasConfirmedConversation, contextTokens, send, continueIfOwed, steer, steerQueue, submitAnswer, dismissQuestion, dismissProblem, questionDraft, saveQuestionDraft, setMessages, adoptRecord, status, error, stop, clearError, resumeStream, setReattachSettled } =
+	const { draftsLoaded, messages, nativeMessages, hasConfirmedConversation, contextTokens, send, continueIfOwed, steer, steerQueue, submitAnswer, dismissQuestion, dismissProblem, questionDraft, saveQuestionDraft, setMessages, adoptRecord, status, error, stop, clearError, resumeStream, setReattachSettled } =
 		useChatSession({ chatId, initialMessages, initialError, initiallyInFlight });
 
 	const sessionFindScopeRef = useRef<HTMLDivElement | null>(null);
+	useEffect(() => {
+		document.documentElement.dataset.lhResumeChecked = "true";
+		void fetch("/api/resume", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chatId }) }).catch(() => {});
+	}, [chatId]);
 	const scrollContextRef = useRef<StickToBottomContext | null>(null);
 	const sourceTextParts = useMemo(() => firstSourceTextParts(messages), [messages]);
 
@@ -537,7 +543,8 @@ export function Chat({
 	}, []);
 	const applyReadingThinking = useCallback((v: string) => {
 		readingThinkingRef.current = v;
-	}, []);
+		if (pending?.key) saveQuestionDraft(pending.key, { readingThinking: v });
+	}, [pending?.key, saveQuestionDraft]);
 	const clearReadingThinking = useCallback(() => {
 		readingThinkingRef.current = "";
 		setReadingThinkingSeed((previous) => ({ ...previous, value: "", revision: previous.revision + 1 }));
@@ -553,7 +560,7 @@ export function Chat({
 				? previous
 				: { questionId: pendingQuestionId, value, revision: previous.revision + 1 },
 		);
-	}, [pendingQuestionId, questionDraft]);
+	}, [pendingQuestionId, questionDraft, draftsLoaded]);
 
 	// The phase at every message (one linear fold): the transcript draws a
 	// color-coded dotted divider at each boundary; the header chip reads the
@@ -567,11 +574,17 @@ export function Chat({
 	const textRef = useRef("");
 	const applyText = useCallback((v: string) => {
 		textRef.current = v;
+		writeLessonLocal(chatId, "composer", v);
 		setComposerDraftRevision((revision) => revision + 1);
-	}, []);
+	}, [chatId]);
 	const recordComposerText = useCallback((v: string) => {
 		textRef.current = v;
-	}, []);
+		writeLessonLocal(chatId, "composer", v);
+	}, [chatId]);
+	useEffect(() => {
+		const saved = readLessonLocal<string>(chatId, "composer");
+		if (typeof saved === "string" && !textRef.current) applyText(saved);
+	}, [chatId, applyText]);
 	// Saved slot completeness is live, but the session's selected route
 	// comes from its own ordinary model control, never today's Strong pin.
 	const { catalog, configured, zeroKeys } = useModelSetup(initialConfigured);
@@ -1042,6 +1055,8 @@ export function Chat({
 	// (duplicate message ids). So: a settle during a busy turn defers the
 	// sync; the next idle fetch adopts the finished record.
 	const [jobs, setJobs] = useState<JobRecord[]>([]);
+	const statusRef = useRef(status);
+	statusRef.current = status;
 	const localStreamRef = useRef(false);
 	localStreamRef.current = localStream;
 	const jobStatusRef = useRef<Map<string, string>>(new Map());
@@ -1063,6 +1078,13 @@ export function Chat({
 		// A disconnected view can miss an entire turn with no job transition.
 		// Keep the catch-up pending if this first read also fails.
 		if (reconnect) pendingSyncRef.current = true;
+		// A suspended GET stream may still look busy locally. Reattach its
+		// reader, never its input POST. "submitted" is deliberately excluded:
+		// the server may not have acknowledged that input yet.
+		if (reconnect && statusRef.current === "streaming") {
+			attachToRunningTurn();
+			return;
+		}
 		try {
 			const res = await fetch(`/api/jobs?chatId=${encodeURIComponent(chatId)}`);
 			if (!res.ok) return;
@@ -1138,8 +1160,6 @@ export function Chat({
 	// 1500ms fallback record poll: discovery is no longer a polling window
 	// that can expire. Handlers read REFS, not closure state — events fire
 	// between renders, and a ref holds the live value at event time.
-	const statusRef = useRef(status);
-	statusRef.current = status;
 	/** Fix B (2026-10-02): turn-settled arrived for OUR OWN turn — the
 	 * record is durable (endTurn fires only after persistTurn); the ready
 	 * flip consumes this flag to canonize the view onto the record. See the
@@ -1408,6 +1428,7 @@ export function Chat({
 				<div ref={sessionFindScopeRef} className="relative flex min-h-0 flex-1">
 				<Conversation className="h-full min-w-0 flex-1" initial="instant" contextRef={scrollContextRef}>
 					<SessionMessageNavigation />
+					<LessonReadingPosition chatId={chatId} />
 					<ConversationContent className="min-h-full gap-0 p-0">
 						<div data-session-find-root="" className={`${COLUMN} flex flex-1 flex-col gap-4 pt-4`}>
 							{messages.length === 0 && !busy && (
@@ -1698,7 +1719,7 @@ export function Chat({
 				    anchored to the dock block's top edge, so it rides every
 				    height morph (typing, a question growing the band, the
 				    fold) and NEVER overlaps the composer. */}
-				<DockOverlay
+				{draftsLoaded && <DockOverlay
 					pending={pending}
 					initialQuestionDraft={pending ? questionDraft(pending.key)?.form : undefined}
 					onSaveQuestionDraft={(form) => { if (pending) saveQuestionDraft(pending.key, { form }); }}
@@ -1780,7 +1801,7 @@ export function Chat({
 						// actually leaves. An offline preflight keeps the draft visible.
 						submitAnswer(pending.tool, pending.toolCallId, reading ? { ...output, readingThinking: reading } : output, pending.key);
 					}}
-				/>
+				/>}
 				</Conversation>
 
 				{/* The session-scoped focuses (chrome-melt wave, 2026-09-19): mounted

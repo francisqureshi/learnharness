@@ -121,7 +121,23 @@ export function useNotifyHub() { return useContext(EventsContext); }
 
 export function ServerEventsProvider({ children, connect }: { children: ReactNode; connect?: () => NotifySource }) {
 	const hub = useMemo(() => createNotifyHub(), []);
-	useEffect(() => wireSource((connect ?? openEventsChannel)(), hub), [hub, connect]);
+	useEffect(() => {
+		let disconnect = wireSource((connect ?? openEventsChannel)(), hub);
+		// WKWebView can retain a silent connection after suspension. Replace
+		// it on foreground/online; opening still owns the normal resync.
+		const reconnect = () => {
+			if (document.visibilityState === "hidden") return;
+			disconnect();
+			disconnect = wireSource((connect ?? openEventsChannel)(), hub);
+		};
+		window.addEventListener("online", reconnect);
+		document.addEventListener("visibilitychange", reconnect);
+		return () => {
+			disconnect();
+			window.removeEventListener("online", reconnect);
+			document.removeEventListener("visibilitychange", reconnect);
+		};
+	}, [hub, connect]);
 	return <EventsContext.Provider value={hub}>{children}</EventsContext.Provider>;
 }
 

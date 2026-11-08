@@ -14,8 +14,9 @@
  * | streaming | error.
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { ChatInput, LhMessage, QuestionAnswerData } from "@/src/core";
+import { readQuestionDraft, writeQuestionDraft } from "./lesson-local";
 import { SessionModel, type SessionState } from "@/components/session-core";
 
 export interface UseChatSessionOptions {
@@ -31,9 +32,17 @@ export interface UseChatSessionOptions {
 export function useChatSession({ chatId, initialMessages, initialError, initiallyInFlight }: UseChatSessionOptions) {
 	// The model is per-mount (chatId-keyed component); onChange forces the
 	// re-render. The ref pattern keeps it stable across renders.
+	const draftsReady = useRef(false);
+	const [draftsLoaded, setDraftsLoaded] = useState(false);
 	const modelRef = useRef<SessionModel | null>(null);
 	if (modelRef.current === null) {
-		modelRef.current = new SessionModel({ chatId, initialMessages, initialError });
+		modelRef.current = new SessionModel({
+			chatId, initialMessages, initialError,
+			loadDraft: (key) => readQuestionDraft(chatId, key),
+			persistDraft: (key, draft) => {
+				if (draftsReady.current) writeQuestionDraft(chatId, key, draft);
+			},
+		});
 	}
 	const model = modelRef.current;
 	// The render VERSION — bumped by every model change, so the state memo
@@ -45,6 +54,9 @@ export function useChatSession({ chatId, initialMessages, initialError, initiall
 	const [version, bump] = useReducer((n: number) => n + 1, 0);
 	useEffect(() => {
 		model.onChange = bump;
+		model.restoreLocalDraft();
+		draftsReady.current = true;
+		setDraftsLoaded(true);
 		return () => {
 			model.onChange = undefined;
 		};
@@ -127,6 +139,7 @@ export function useChatSession({ chatId, initialMessages, initialError, initiall
 	const resumeStream = useCallback(() => void model.resumeStream(), [model]);
 
 	return {
+		draftsLoaded,
 		messages: state.messages,
 		nativeMessages: state.nativeMessages,
 		hasConfirmedConversation: state.hasConfirmedConversation,

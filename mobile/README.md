@@ -98,3 +98,29 @@ shared. `node scripts/smoke-mobile-settings.mjs ISOLATED_URL` checks all categor
 widths, switch geometry and save/reopen/restore behavior. Use isolated data because
 that check temporarily changes a graph setting. The iOS test suite also checks
 Settings navigation and editing with the software keyboard open.
+
+## Resume and reconnect
+
+A fresh phone launch at `/` opens the last lesson viewed on any client. The
+server stores only its ID in `data/last-lesson.json`; viewing does not reorder
+lessons or change model settings. Explicit New Session and Graph destinations
+remain available, and a deleted last lesson falls back to New Session. Desktop
+launch stays on its existing home screen.
+
+Draft composer text, question choices/reasoning, practice text, and reading
+anchors stay in origin-scoped device storage. They do not sync between devices.
+A question draft is restored only for the currently pending call; reconnecting
+never submits that draft. Clearing the app/browser's storage removes these local
+copies. This is not offline lesson support: loading lessons still requires hws.
+
+The notification stream immediately flushes a connection frame. Foreground and
+online events replace its connection and resync server records; an already
+streaming turn reattaches its GET reader without replaying the input POST.
+
+`node scripts/smoke-resume.mjs LOOPBACK_URL ISOLATED_DATA_DIRECTORY` checks
+relaunch, local draft/position recovery, separate-device resume, missed updates,
+foreground recovery, and deletion fallback without calling a provider. It writes
+only to isolated fixtures and restores them afterward. The optional XCUITest
+`testResumeDraftAfterRelaunch` requires that fixture's pending quiz as the shared
+last lesson; it verifies an actual WKWebView relaunch and background/foreground.
+Physical iPhone lock/unlock and Wi-Fi/cellular handoff remain device acceptance.

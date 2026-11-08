@@ -57,3 +57,5 @@ export * from "./custom-provider.ts";
 export { customProviderGet, customProviderMutation } from "./custom-provider-http.ts";
 
 export { activeUploads, uploadResponse, uploadsStatusResponse } from "./uploads.ts";
+
+export { readLastLesson, writeLastLesson } from "../store/learning-resume.ts";

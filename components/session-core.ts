@@ -212,6 +212,8 @@ export function visibleQueuedSteers(
 }
 
 export interface SessionModelOptions extends SessionModelDeps {
+	loadDraft?: (key: string) => QuestionDraft | undefined;
+	persistDraft?: (key: string, draft: QuestionDraft) => void;
 	chatId: string;
 	initialMessages: LhMessage[];
 	/** Retained, memory-only server failure when reopening a session. */
@@ -240,6 +242,8 @@ export class SessionModel {
 	// at every full sync; the write-ahead absorbs the optimistic entries.
 	private base: LhMessage[];
 	private tail: LhMessage[] = [];
+	private loadDraft?: SessionModelOptions["loadDraft"];
+	private persistDraft?: SessionModelOptions["persistDraft"];
 	private questionDrafts = new Map<string, QuestionDraft>();
 	/** Only learner answers submitted through send(), never silent dismissals. */
 	private unconfirmedAnswers = new Map<string, string>();
@@ -267,6 +271,8 @@ export class SessionModel {
 
 	constructor(opts: SessionModelOptions) {
 		this.chatId = opts.chatId;
+		this.loadDraft = opts.loadDraft;
+		this.persistDraft = opts.persistDraft;
 		this.base = opts.initialMessages;
 		this.errorValue = opts.initialError === undefined ? null : { message: opts.initialError };
 		this.automaticContinuationBlocked = opts.initialError !== undefined;
@@ -902,13 +908,21 @@ export class SessionModel {
 		this.setStatus("ready");
 	}
 
-	/** Submission snapshots outlive the dock, not the session mount. */
+	restoreLocalDraft(): void {
+		const key = pendingQuestionOf(this.base)?.key;
+		const draft = key ? this.loadDraft?.(key) : undefined;
+		if (key && draft) { this.questionDrafts.set(key, draft); this.onChange?.(); }
+	}
+
+	/** Drafts stay local; only the currently pending call is restored on mount. */
 	questionDraft(questionKey: string): QuestionDraft | undefined {
 		return this.questionDrafts.get(questionKey);
 	}
 
 	saveQuestionDraft(questionKey: string, draft: Partial<QuestionDraft>): void {
-		this.questionDrafts.set(questionKey, { ...this.questionDrafts.get(questionKey), ...draft });
+		const merged = { ...this.questionDrafts.get(questionKey), ...draft };
+		this.questionDrafts.set(questionKey, merged);
+		this.persistDraft?.(questionKey, merged);
 	}
 
 	private forgetResolvedDrafts(record: readonly LhMessage[]): void {

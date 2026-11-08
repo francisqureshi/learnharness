@@ -910,6 +910,21 @@ describe("answer submission recovery", () => {
 		assert.deepEqual(calls.slice(0, 3), ["/api/chat", "/api/chats/chat_x", "/api/chat"]);
 	});
 
+	it("restores only the currently pending question and never replays the saved answer", () => {
+		let fetches = 0;
+		const loaded: string[] = [];
+		const draft = { readingThinking: "unfinished reasoning" };
+		const m = model({ initialMessages: [question], loadDraft: (key) => { loaded.push(key); return draft; }, fetch: async () => { fetches++; throw new Error("unexpected send"); } });
+		m.restoreLocalDraft();
+		assert.deepEqual(m.questionDraft("q1"), draft);
+		assert.deepEqual(loaded, ["q1"]);
+		m.setMessages([question, newAnswerResult("q1", "quiz", answer)]);
+		m.restoreLocalDraft();
+		assert.equal(m.questionDraft("q1"), undefined);
+		assert.deepEqual(loaded, ["q1"], "resolved calls never load their stale drafts");
+		assert.equal(fetches, 0);
+	});
+
 	it("retains all submitted draft channels until the canonical answer resolves the call", async () => {
 		const form = { selection: { selected: new Set([1]), otherSelected: true, dontKnow: false }, thinking: "reasoning", other: "custom answer", text: "free text", confidenceIndex: 4 };
 		const m = model({ initialMessages: [question], fetch: async () => { throw new TypeError("offline"); } });

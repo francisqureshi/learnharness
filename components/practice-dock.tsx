@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import { joinDictation, useDictationTarget } from "@/components/dictation";
 import { useEnterSubmits } from "@/components/enter-submits";
 import { PathInput } from "@/components/path-input";
+import { readLessonLocal, writeLessonLocal } from "./lesson-local";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,15 +56,20 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 	// discipline): a submit resuming after `await finishDictation()` reads
 	// the tail, never a stale closure.
 	const thinkingRef = useRef("");
+	useEffect(() => {
+		const saved = readLessonLocal<string>(problemCallId, "practice");
+		if (typeof saved === "string") { thinkingRef.current = saved; setThinking(saved); }
+	}, [problemCallId]);
 
 	useDictationTarget(
 		useCallback(
 			(t: string) => {
 				const v = joinDictation(thinkingRef.current, t);
 				thinkingRef.current = v;
+				writeLessonLocal(problemCallId, "practice", v);
 				setThinking(v);
 			},
-			[],
+			[problemCallId],
 		),
 		true,
 	);
@@ -73,6 +79,7 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 		const text = thinkingRef.current.trim();
 		if (text.length === 0) return;
 		thinkingRef.current = "";
+		writeLessonLocal(problemCallId, "practice", "");
 		setThinking("");
 		onSubmit(text);
 	};
@@ -126,6 +133,7 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 					value={thinking}
 					onValueChange={(value) => {
 						thinkingRef.current = value;
+						writeLessonLocal(problemCallId, "practice", value);
 						setThinking(value);
 					}}
 					onKeyDown={(e) => {

@@ -336,6 +336,11 @@ function QuestionDockForm({
 	// deliberate (the same number, the same meaning). The dock unmounts
 	// between questions, so each question starts fresh at 50.
 	const [confIdx, setConfIdx] = useState<number>(initialDraft?.confidenceIndex ?? DEFAULT_CONFIDENCE_INDEX);
+	const saveDraftRef = useRef(onSaveDraft);
+	saveDraftRef.current = onSaveDraft;
+	useEffect(() => {
+		saveDraftRef.current?.({ selection: sel, thinking, other, text, confidenceIndex: confIdx });
+	}, [sel, thinking, other, text, confIdx]);
 	const selectMode: SelectMode = qd.mode === "multi-select" ? "multi-select" : "single-select";
 
 	// The PRIMARY dictation input (owner, STT round 1): while a question

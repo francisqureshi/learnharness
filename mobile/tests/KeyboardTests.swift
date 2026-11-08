@@ -1,5 +1,39 @@
 import XCTest
 final class KeyboardTests: XCTestCase {
+  // Run against the isolated resume fixture, whose shared last lesson has a
+  // pending quiz. This writes only an unsent device-local draft.
+  func testResumeDraftAfterRelaunch() throws {
+    let app = XCUIApplication(bundleIdentifier: "net.learnharness.personalpreview")
+    app.launch()
+    let editor = app.textViews.firstMatch
+    XCTAssertTrue(editor.waitForExistence(timeout: 30))
+    editor.tap()
+    let tutorial = app.buttons["Continue"].firstMatch
+    if tutorial.waitForExistence(timeout: 2) { tutorial.tap() }
+    editor.tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+    let text = "Native resume draft"
+    app.typeText(text)
+    let saved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      (editor.value as? String)?.contains(text) == true
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 5), .completed)
+    app.terminate()
+    app.launch()
+    let restored = app.textViews.firstMatch
+    XCTAssertTrue(restored.waitForExistence(timeout: 30))
+    let recovered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      (restored.value as? String)?.contains(text) == true
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [recovered], timeout: 10), .completed)
+    XCTAssertFalse(app.keyboards.firstMatch.exists, "Relaunch must not open the keyboard")
+    XCUIDevice.shared.press(.home)
+    app.activate()
+    XCTAssertTrue(app.buttons["Open sidebar"].firstMatch.waitForExistence(timeout: 10))
+    XCTAssertTrue((restored.value as? String)?.contains(text) == true)
+    let shot = XCTAttachment(screenshot: app.screenshot()); shot.lifetime = .keepAlways; add(shot)
+  }
+
   func testKeyboardKeepsHeaderVisible() throws {
     let app = XCUIApplication(bundleIdentifier: "net.learnharness.personalpreview")
     app.launch()
