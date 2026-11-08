@@ -49,5 +49,5 @@ it("dialog errors propagate without manufacturing a path", async () => {
 });
 it("production IPC registration supplies the owned windows and exact application origin", () => {
 	const main = readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-	assert.match(main, /ipcMain\.handle\("lh:attachment:pick", \(event, mode\) => pickAttachmentPath\(event, mode, \{\s*BrowserWindow, dialog, trustedAppWindows, origin: new URL\(url\)\.origin,/);
+	assert.match(main, /ipcMain\.handle\("lh:attachment:pick", \(event, mode\) => \{[\s\S]*?if \(REMOTE\) throw new Error\([\s\S]*?return pickAttachmentPath\(event, mode, \{ BrowserWindow, dialog, trustedAppWindows, origin: new URL\(url\)\.origin \}\);/);
 });

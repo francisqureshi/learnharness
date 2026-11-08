@@ -31,10 +31,10 @@ test("rollback restarts validation even when the previous system activation fail
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("activation accepts only the existing wg0 failure after the target generation is active", () => {
+for (const scriptName of ["deploy-hws.sh", "update-hws.sh"]) test(`${scriptName}: activation accepts only the existing wg0 failure after the target generation is active`, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lh-switch-test-"));
   try {
-    const script = fs.readFileSync(new URL("../scripts/deploy-hws.sh", import.meta.url), "utf8");
+    const script = fs.readFileSync(new URL(`../scripts/${scriptName}`, import.meta.url), "utf8");
     const start = script.indexOf("switch_target() {");
     const end = script.indexOf("\nstopped=0", start);
     assert(start >= 0 && end > start);
@@ -60,5 +60,28 @@ test("activation accepts only the existing wg0 failure after the target generati
       });
       assert.equal(run.status, fixture.expected, fixture.name + ": " + run.stderr);
     }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test("permanent update rollback restarts the service even if previous activation fails", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lh-update-test-"));
+  try {
+    const script = fs.readFileSync(new URL("../scripts/update-hws.sh", import.meta.url), "utf8");
+    const start = script.indexOf("rollback() {");
+    const end = script.indexOf("trap rollback EXIT", start);
+    fs.mkdirSync(path.join(directory, "bin"));
+    fs.writeFileSync(path.join(directory, "bin/switch-to-configuration"), "#!/usr/bin/env bash\nexit 4\n", { mode: 0o755 });
+    const run = spawnSync("bash", ["-c", `
+      set -euo pipefail
+      previous="$1"; stopped=1; switched=1
+      systemctl() { printf '%s\\n' "$*" >> "$previous/recovery"; }
+      nix-env() { :; }
+      ${script.slice(start, end)}
+      trap rollback EXIT
+      exit 1
+    `, "test", directory], { encoding: "utf8" });
+    assert.equal(run.status, 1);
+    assert.match(fs.readFileSync(path.join(directory, "recovery"), "utf8"), /start learnharness.service learnharness-backup.timer/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileSymlinkIcon, XIcon } from "lucide-react";
 import { directoryReferencePath, quoteFilePath } from "@/src/core";
 import { appendToPrimaryInput } from "@/components/dictation";
+import { uploadFiles } from "@/components/upload-files";
 import { INSERT_FILE_PATHS_EVENT } from "@/components/path-input";
 
 export const BROWSER_NOTICE = "Local file paths can only be attached in the desktop app. You can paste a full path instead.";
@@ -13,6 +14,7 @@ export const BROWSER_NOTICE = "Local file paths can only be attached in the desk
 export function FilePathDropZone({ children, className }: { children: React.ReactNode; className?: string }) {
 	const root = useRef<HTMLElement>(null);
 	const depth = useRef(0);
+	const uploading = useRef(false);
 	const [dragging, setDragging] = useState(false);
 	const [notice, setNotice] = useState("");
 	const hasFiles = (event: React.DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
@@ -54,11 +56,34 @@ export function FilePathDropZone({ children, className }: { children: React.Reac
 				if (depth.current === 0) setDragging(false);
 			}}
 			onDragEnd={clearDrag}
-			onDrop={(event) => {
+			onDrop={async (event) => {
 				if (!hasFiles(event)) return;
 				event.preventDefault();
 				event.stopPropagation();
 				clearDrag();
+				if (window.lh?.attachmentTransport === "upload") {
+					if (uploading.current) return;
+					const files: File[] = [];
+					let skipped = 0;
+					for (const item of Array.from(event.dataTransfer.items)) {
+						if (item.kind !== "file") continue;
+						const entry = item.webkitGetAsEntry?.();
+						if (!entry?.isFile) { skipped++; continue; }
+						const file = item.getAsFile();
+						if (file) files.push(file);
+					}
+					const focused = document.activeElement?.closest<HTMLElement>("[data-file-path-input]");
+					const target = focused && event.currentTarget.contains(focused) ? focused : event.currentTarget.querySelector<HTMLElement>("[data-file-path-input]");
+					if (!target) { setNotice("Open a lesson input before uploading files."); return; }
+					uploading.current = true;
+					setNotice("Uploading files to hws…");
+					try {
+						const result = await uploadFiles(files);
+						if (target.isConnected && result.paths.length) target.dispatchEvent(new CustomEvent(INSERT_FILE_PATHS_EVENT, { detail: result.paths }));
+						setNotice([skipped ? "Folders cannot be uploaded yet. Choose individual files." : "", ...result.errors].filter(Boolean).join(" "));
+					} finally { uploading.current = false; }
+					return;
+				}
 				const resolve = window.lh?.getPathForFile;
 				if (!resolve) { setNotice(BROWSER_NOTICE); return; }
 				// Inspect only the dropped item's type, never traverse its entries.
@@ -96,7 +121,7 @@ export function FilePathDropZone({ children, className }: { children: React.Reac
 				<div data-testid="file-path-drop-indicator" className="pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/85 p-6 text-center backdrop-blur-sm">
 					<div className="flex max-w-md flex-col items-center gap-3">
 						<FileSymlinkIcon className="size-8 text-primary" aria-hidden />
-						<span className="font-ui text-sm">{window.lh?.getPathForFile ? "Drop to attach file paths" : BROWSER_NOTICE}</span>
+						<span className="font-ui text-sm">{window.lh?.attachmentTransport === "upload" ? "Drop to upload files to hws (50 MB each)" : window.lh?.getPathForFile ? "Drop to attach file paths" : BROWSER_NOTICE}</span>
 					</div>
 				</div>
 			)}

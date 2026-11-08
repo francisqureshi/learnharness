@@ -40,6 +40,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"mode\":\"light\"}' http://127.0.0.1:3199/api/settings/appearance")
     saved = json.loads(machine.succeed("curl -fsS http://127.0.0.1:3199/api/settings"))
     assert saved["settings"]["appearance"]["mode"] == "light"
+    upload = json.loads(machine.succeed("curl -fsS -X POST -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-upload: 1' -H 'x-file-name: lesson.txt' --data-binary 'Uploaded lesson fixture' http://127.0.0.1:3199/api/uploads"))
+    machine.succeed("test $(stat -c %a " + shlex.quote(upload["path"]) + ") = 600")
+    assert machine.succeed("cat " + shlex.quote(upload["path"])) == "Uploaded lesson fixture"
     chat = json.loads(machine.succeed("curl -fsS -X POST -H 'Content-Type: application/json' --data '{\"title\":\"Backup deferral fixture\"}' http://127.0.0.1:3199/api/chats"))
     active = json.dumps({"id": "backup_fixture", "chatId": chat["id"], "kind": "demo", "status": "running", "updatedAt": "2026-01-01T00:00:00Z"})
     machine.succeed("mkdir -p /var/lib/learnharness/data/jobs")
@@ -49,6 +52,13 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("systemctl show -p MainPID --value learnharness") == pid
     machine.succeed("systemctl stop learnharness-backup.service")
     machine.succeed("rm /var/lib/learnharness/data/jobs/backup_fixture.json")
+    machine.succeed("dd if=/dev/zero of=/tmp/upload-fixture bs=1024 count=100")
+    machine.succeed("curl -sS --limit-rate 1024 -X POST -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-upload: 1' -H 'x-file-name: slow.txt' --data-binary @/tmp/upload-fixture http://127.0.0.1:3199/api/uploads >/tmp/upload-result 2>&1 & echo $! >/tmp/upload-pid")
+    machine.wait_until_succeeds("curl -fsS http://127.0.0.1:3199/api/uploads | grep -q '\"active\":1'")
+    machine.fail("systemctl start learnharness-backup.service")
+    assert machine.succeed("systemctl show -p MainPID --value learnharness") == pid
+    machine.succeed("systemctl stop learnharness-backup.service; kill $(cat /tmp/upload-pid)")
+    machine.wait_until_succeeds("curl -fsS http://127.0.0.1:3199/api/uploads | grep -q '\"active\":0'")
     machine.succeed("touch -d '16 days ago' /var/lib/learnharness-backups/learnharness-expired.tar.gz /var/lib/learnharness-backups/unrelated.txt")
     machine.succeed("systemctl start learnharness-backup.service")
     machine.wait_for_unit("learnharness.service")
@@ -62,6 +72,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"tar -xzf {archive} -C /var/lib/learnharness")
     machine.succeed("systemctl start learnharness.service")
     assert json.loads(machine.succeed("curl -fsS http://127.0.0.1:3199/api/settings")) == saved
+    assert machine.succeed("cat " + shlex.quote(upload["path"])) == "Uploaded lesson fixture"
     before = machine.succeed("curl -fsS http://127.0.0.1:3199/api/graph")
     json.loads(before)
     machine.succeed("systemctl kill --signal=SIGKILL learnharness.service")

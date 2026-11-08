@@ -6,6 +6,7 @@ import { PaperclipIcon } from "lucide-react";
 import { directoryReferencePath, quoteFilePath } from "@/src/core";
 import { Hint } from "@/components/ui/hint";
 import { INSERT_FILE_PATHS_EVENT } from "@/components/path-input";
+import { uploadFiles } from "@/components/upload-files";
 import { BROWSER_NOTICE } from "@/components/file-path-drop-zone";
 
 /** Picked files → the rooted paths an editor chips (issue #285), via the
@@ -43,7 +44,7 @@ const noSubscribe = () => () => {};
 /** The bridge is fixed for the window's life; the server render is always
  *  the browser case, so hydration never mismatches. */
 function useDesktopPaths(): boolean {
-	return useSyncExternalStore(noSubscribe, () => Boolean(window.lh?.getPathForFile), () => false);
+	return useSyncExternalStore(noSubscribe, () => Boolean(window.lh?.getPathForFile || window.lh?.attachmentTransport === "upload"), () => false);
 }
 
 /**
@@ -58,6 +59,8 @@ function useDesktopPaths(): boolean {
 export function AttachFilesButton({ editorRef }: { editorRef: React.RefObject<HTMLDivElement | null> }) {
 	const pickerRef = useRef<HTMLInputElement>(null);
 	const desktop = useDesktopPaths();
+	const remote = useSyncExternalStore(noSubscribe, () => window.lh?.attachmentTransport === "upload", () => false);
+	const uploading = useRef(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const popupRef = useRef<HTMLDivElement>(null);
 	const choosingFolder = useRef(false);
@@ -125,14 +128,28 @@ export function AttachFilesButton({ editorRef }: { editorRef: React.RefObject<HT
 				multiple
 				hidden
 				data-testid="attach-files-input"
-				onChange={(e) => {
+				onChange={async (e) => {
+					const files = Array.from(e.currentTarget.files ?? []);
+					e.currentTarget.value = "";
+					if (remote) {
+						if (uploading.current) return;
+						uploading.current = true;
+						const editor = editorRef.current;
+						setNotice("Uploading files to hws…");
+						try {
+							const result = await uploadFiles(files);
+							if (editor?.isConnected && editor === editorRef.current && result.paths.length) editor.dispatchEvent(new CustomEvent(INSERT_FILE_PATHS_EVENT, { detail: result.paths }));
+							setNotice(result.errors.join(" "));
+						} finally { uploading.current = false; }
+						return;
+					}
 					const resolve = window.lh?.getPathForFile;
-					const { paths } = resolve ? pathsForFiles(Array.from(e.currentTarget.files ?? []), resolve) : { paths: [] };
+					const { paths } = resolve ? pathsForFiles(files, resolve) : { paths: [] };
 					if (paths.length > 0) editorRef.current?.dispatchEvent(new CustomEvent(INSERT_FILE_PATHS_EVENT, { detail: paths }));
 					e.currentTarget.value = ""; // allow re-picking the same file
 				}}
 			/>
-			<Hint label={desktop ? "Attach files or a folder" : BROWSER_NOTICE}>
+			<Hint label={desktop ? (remote ? "Upload files to hws (50 MB each)" : "Attach files or a folder") : BROWSER_NOTICE}>
 				<button
 					ref={buttonRef}
 					type="button"
@@ -141,7 +158,7 @@ export function AttachFilesButton({ editorRef }: { editorRef: React.RefObject<HT
 					aria-haspopup="menu"
 					aria-expanded={open}
 					data-testid="attach-files"
-					onClick={() => { if (desktop) { setNotice(""); setOpen(!open); } }}
+					onClick={() => { if (desktop && !uploading.current) { setNotice(""); setOpen(!open); } }}
 					className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted-foreground"
 				>
 					<PaperclipIcon className="size-4" />
@@ -161,8 +178,8 @@ export function AttachFilesButton({ editorRef }: { editorRef: React.RefObject<HT
 				{open ? <>
 					<button type="button" role="menuitem" className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-accent"
 						onClick={() => { setOpen(false); pickerRef.current?.click(); }}>Files</button>
-					<button type="button" role="menuitem" className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-accent"
-						onClick={() => { void chooseFolder(); }}>Folder</button>
+					{!remote && <button type="button" role="menuitem" className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-accent"
+						onClick={() => { void chooseFolder(); }}>Folder</button>}
 				</> : notice}
 			</div>, document.body)}
 		</div>

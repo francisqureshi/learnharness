@@ -1055,12 +1055,16 @@ export function Chat({
 	// the ref the timer fires through (a stale closure must never fetch an
 	// old chatId).
 	const fetchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	const fetchJobsRef = useRef<() => void>(() => {});
-	const fetchJobs = useCallback(async () => {
+	const fetchJobsRef = useRef<(reconnect?: boolean) => void>(() => {});
+	const fetchJobs = useCallback(async (reconnect = false) => {
+		// A disconnected view can miss an entire turn with no job transition.
+		// Keep the catch-up pending if this first read also fails.
+		if (reconnect) pendingSyncRef.current = true;
 		try {
 			const res = await fetch(`/api/jobs?chatId=${encodeURIComponent(chatId)}`);
 			if (!res.ok) return;
 			const data = (await res.json()) as { jobs?: JobRecord[]; turnInFlight?: boolean };
+			if (reconnect && data.turnInFlight === true && !localStreamRef.current && !turnInFlightRef.current) attachToRunningTurn();
 			const list = data.jobs ?? [];
 			for (const j of list) {
 				const prev = jobStatusRef.current.get(j.id);
@@ -1092,15 +1096,13 @@ export function Chat({
 				void syncFromServer();
 			}
 			setJobs(list);
-			// (Wake-turn adoption that lived here — the turnInFlight attach
-			// line — died at S3: turn-started on the events channel owns
-			// discovery now. turnInFlight is STILL READ above: the settle
-			// logic's idle check needs it.)
+			// Live events own ordinary discovery; reconnect also discovers
+			// turns whose start event was missed while this view was away.
 		} catch {
 			/* transient fetch failure — the next jobs-changed announcement re-fetches */
 		}
-	}, [chatId, syncFromServer, adoptAppendOnly]);
-	fetchJobsRef.current = () => void fetchJobs();
+	}, [chatId, syncFromServer, adoptAppendOnly, attachToRunningTurn]);
+	fetchJobsRef.current = (reconnect) => void fetchJobs(reconnect);
 	// Mount + chat switch: the IMMEDIATE (non-debounced) initial read. The
 	// firstFetch guard resets with the old rule — true only when this
 	// session has never seen a job (a chat switch keeps the map: job ids
@@ -1118,7 +1120,7 @@ export function Chat({
 		}, 250);
 	});
 	// Reconnect catch-up: events missed while the channel was down.
-	useServerResync(() => fetchJobsRef.current());
+	useServerResync(() => fetchJobsRef.current(true));
 	useEffect(
 		() => () => {
 			if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);

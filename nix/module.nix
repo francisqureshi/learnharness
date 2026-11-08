@@ -38,6 +38,7 @@ in {
         HOSTNAME = "127.0.0.1";
         PORT = toString cfg.port;
         LH_CHATGPT_CALLBACK_PORT = toString cfg.chatgptCallbackPort;
+        LH_SHARED_SERVER = "1";
         LH_DATA_DIR = "/var/lib/learnharness/data";
         LH_AUTH_FILE = "/var/lib/learnharness/auth.json";
         XDG_CACHE_HOME = "/var/cache/learnharness";

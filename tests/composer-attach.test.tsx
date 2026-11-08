@@ -19,7 +19,7 @@ import { quoteFilePath } from "../src/core/file-paths.ts";
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => { await cleanup?.(); cleanup = undefined; });
 
-async function fixture({ desktop = true } = {}) {
+async function fixture({ desktop = true, remote = false } = {}) {
 	const { window: win, document: doc } = parseHTML("<html><body><div id='root'></div></body></html>");
 	let active: Element = doc.body;
 	Object.defineProperty(doc, "activeElement", { get: () => active });
@@ -41,6 +41,10 @@ async function fixture({ desktop = true } = {}) {
 	let value = "readthis";
 	const previous = new Map<string, PropertyDescriptor | undefined>();
 	for (const [name, next] of Object.entries({
+		...(remote ? { fetch: async (_url: string, init: RequestInit) => {
+			const file = init.body as File;
+			return file.name === "failed.txt" ? Response.json({ error: "Disk full" }, { status: 500 }) : Response.json({ path: `/server/uploads/${file.name}` });
+		} } : {}),
 		React, window: win, document: doc, Node: win.Node, HTMLElement: win.HTMLElement, Element: win.Element,
 		Event: win.Event, CustomEvent: win.CustomEvent, IS_REACT_ACT_ENVIRONMENT: true, innerWidth: 1000, innerHeight: 800,
 	})) {
@@ -49,7 +53,7 @@ async function fixture({ desktop = true } = {}) {
 	}
 	Object.defineProperty(win, "lh", {
 		configurable: true,
-		value: desktop ? {
+		value: remote ? { attachmentTransport: "upload" } : desktop ? {
 			getPathForFile: (file: File) => backingPaths.get(file) ?? "",
 			chooseAttachmentFolder: async () => { folderCalls++; if (folderResult instanceof Error) throw folderResult; return folderResult; },
 		} : undefined,
@@ -266,5 +270,19 @@ describe("composer attach button", () => {
 		assert.equal(f.pickerClicks, 0);
 		await f.pick([f.file("a.pdf", "/a.pdf")]);
 		assert.equal(f.value, "readthis");
+	});
+});
+
+
+describe("shared-server file picker", () => {
+	it("uploads files, inserts successful server paths and reports failures without sending", async () => {
+		const f = await fixture({ remote: true });
+		await act(async () => { f.doc.querySelector<HTMLButtonElement>('[data-testid="attach-files"]')!.click(); });
+		assert.equal(f.doc.querySelectorAll('[role="menuitem"]').length, 1);
+		await act(async () => { f.doc.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click(); });
+		await f.pick([new File(["ok"], "notes.txt"), new File(["no"], "failed.txt")]);
+		assert.match(f.value, /server\/uploads\/notes.txt/);
+		assert.doesNotMatch(f.value, /failed.txt/);
+		assert.match(f.doc.querySelector('[role="status"]')?.textContent ?? "", /failed.txt: Disk full/);
 	});
 });

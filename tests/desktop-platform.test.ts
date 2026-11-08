@@ -19,7 +19,7 @@ function windowOptions(platform: string, env: Record<string, string> = {}) {
 	class FakeWindow {
 		constructor(readonly options: unknown) {}
 		webContents = { on() {}, setWindowOpenHandler() {} };
-		loadURL() {}
+		loadURL() { return Promise.resolve(); }
 		once() {}
 	}
 	const electron = {

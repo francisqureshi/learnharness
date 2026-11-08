@@ -9,6 +9,11 @@ flock -n 9 || exit 0
 
 # A failed/ambiguous liveness check must defer the snapshot, not stop the app.
 systemctl is-active --quiet learnharness.service
+uploads=$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$port/api/uploads")
+if ! jq -e '.active == 0' <<<"$uploads" >/dev/null; then
+  echo 'Deferring backup: file uploads are active.'
+  exit 75
+fi
 chats=$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$port/api/chats")
 if ! jq -e '.chats | all(.busy == false and .compacting == false)' <<<"$chats" >/dev/null; then
   echo 'Deferring backup: lesson work is active.'

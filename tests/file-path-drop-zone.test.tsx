@@ -14,7 +14,7 @@ afterEach(async () => { await cleanup?.(); cleanup = undefined; });
 
 /** No native DataTransfer/Selection in linkedom. These shims exercise React's
  * real bubbling handlers and the editor's logical caret contract, not OS drag. */
-async function fixture({ desktop = true, claimed = true } = {}) {
+async function fixture({ desktop = true, claimed = true, remote = false } = {}) {
 	const { window: win, document: doc } = parseHTML("<html><body><div id='root'></div></body></html>");
 	let active: Element = doc.body;
 	Object.defineProperty(doc, "activeElement", { get: () => active });
@@ -34,7 +34,7 @@ async function fixture({ desktop = true, claimed = true } = {}) {
 	let submits = 0;
 	let keys = 0;
 	let value = "readthis";
-	const bridge = desktop ? { getPathForFile(file: File) {
+	const bridge = remote ? { attachmentTransport: "upload" } : desktop ? { getPathForFile(file: File) {
 		resolved.push(file);
 		const result = backingPaths.get(file);
 		if (result instanceof Error) throw result;
@@ -44,7 +44,11 @@ async function fixture({ desktop = true, claimed = true } = {}) {
 	for (const [name, next] of Object.entries({
 		React, window: win, document: doc, Node: win.Node, HTMLElement: win.HTMLElement, Element: win.Element,
 		Event: win.Event, CustomEvent: win.CustomEvent, IS_REACT_ACT_ENVIRONMENT: true,
-		fetch: () => { uploads++; throw new Error("No network expected for file drops"); },
+		fetch: (_url: string, init: RequestInit) => {
+			uploads++;
+			if (!remote) throw new Error("No network expected for file drops");
+			return Promise.resolve(Response.json({ path: `/server/uploads/${(init.body as File).name}` }));
+		},
 	})) {
 		previous.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
 		Object.defineProperty(globalThis, name, { configurable: true, writable: true, value: next });
@@ -253,4 +257,15 @@ test("production AppShell places the sidebar outside its content-only drop zone"
 	const shell = source.slice(source.indexOf("export function AppShell("));
 	assert.match(shell, /<SessionsSidebar\s*\/>\s*<FilePathDropZone\b[^>]*>\{children\}<\/FilePathDropZone>/);
 	assert.doesNotMatch(shell, /<FilePathDropZone\b[^>]*>[\s\S]*<SessionsSidebar/);
+});
+
+
+test("remote drops upload individual files to the captured editor and reject folders", async () => {
+	const f = await fixture({ remote: true });
+	f.focusEditor(4);
+	await f.event("drop", f.transfer([new File(["fixture"], "notes.txt"), new File([], "folder")], [1]));
+	assert.match(f.value, /server\/uploads\/notes.txt/);
+	assert.doesNotMatch(f.value, /folder/);
+	assert.deepEqual(f.resolved, []);
+	assert.match(f.status, /Folders cannot be uploaded/);
 });
