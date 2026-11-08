@@ -31,6 +31,11 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test $(stat -c %a /var/lib/learnharness) = 700")
     machine.succeed("test $(stat -c %U /var/lib/learnharness) = learnharness")
     machine.succeed("ss -ltn | grep '127.0.0.1:3199'")
+    machine.succeed("curl -fsS -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-subscriptions: 1' --data '{\"providerId\":\"chatgpt\",\"op\":\"login\"}' http://127.0.0.1:3199/api/subscriptions")
+    machine.succeed("ss -ltn | grep '127.0.0.1:1455'")
+    assert machine.succeed("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:1455/auth/callback?state=invalid") == "400"
+    machine.succeed("curl -fsS -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-subscriptions: 1' --data '{\"providerId\":\"chatgpt\",\"op\":\"cancel\"}' http://127.0.0.1:3199/api/subscriptions")
+    machine.succeed("test $(stat -c %a /var/lib/learnharness/chatgpt-credentials.json) = 600")
     machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"mode\":\"light\"}' http://127.0.0.1:3199/api/settings/appearance")
     saved = json.loads(machine.succeed("curl -fsS http://127.0.0.1:3199/api/settings"))
     assert saved["settings"]["appearance"]["mode"] == "light"

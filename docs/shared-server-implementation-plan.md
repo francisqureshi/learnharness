@@ -127,3 +127,9 @@ No paid model calls, credential changes, data migration, or server restarts were
 5. Preview Mac identity/update policy and supported remote connection UX.
 
 Independent packaging work can proceed while these are open; migration, login/callback implementation, and product behaviour must wait for their relevant decisions. The next reviewable deliverable should pair the Nix package/module proposal with early subscription and actual Mac-shell validation, using scratch state before any production cutover.
+
+## Implementation update — 2026-11-08
+
+The owner selected Mac browser sign-in through SSH and fully offline server demo verification. [The Nix implementation](nix-server.md) now provides the fixed loopback callback, an isolated Chromium launcher and an executable NixOS VM acceptance test. The implementation branch includes upstream v0.5.0 (`713377f`), which also adds atomic store writes; reassess slice C against that code before duplicating it.
+
+macmini-uptown is reachable by SSH again, and a Mac loopback → SSH → hws callback probe passed. Xcode 27.1 is installed but Command Line Tools remain selected. The old transient preview was inactive; a fresh `learnharness-validation.service` now serves the existing private URL using `/home/fq/.local/share/learnharness-validation`. It is a temporary user service, not the durable system deployment. The owner must finish browser authentication before live subscription validation. Existing preview/Mac records are untouched; migration and backup choices remain open.

@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { verifyProviderRuntime } from "./smoke-provider-runtime.mjs";
 import { verifyDemoRuntime } from "./smoke-demo-runtime.mjs";
+import { verifyIsolatedDemo } from "./smoke-isolated-demo.mjs";
 
 const pkg = process.argv[2];
 assert.ok(pkg, "usage: smoke-nix-server.mjs /nix/store/...-learnharness-server");
@@ -23,6 +24,8 @@ let log = "";
 try {
   verifyProviderRuntime(payload);
   verifyDemoRuntime(payload);
+  const { getHeadless } = await import(pathToFileURL(path.join(payload, "src/agent/subagents/headless-check.mjs")).href);
+  await verifyIsolatedDemo(getHeadless());
 
   const { Resvg } = require("@resvg/resvg-js");
   const svg = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="blue"/></svg>');

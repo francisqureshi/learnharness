@@ -95,7 +95,8 @@ function allowedAuthEndpoint(value) {
 	} catch { return false; }
 }
 
-function createChatGPT({ store, openExternal, fetch: request = globalThis.fetch, onChange = () => {}, timeoutMs = 180000 }) {
+function createChatGPT({ store, openExternal, fetch: request = globalThis.fetch, onChange = () => {}, timeoutMs = 180000, callbackPort = 0 }) {
+	if (!Number.isInteger(callbackPort) || callbackPort < 0 || callbackPort > 65535) throw new Error("Invalid ChatGPT callback port.");
 	let state;
 	let init;
 	let queue = Promise.resolve();
@@ -279,7 +280,7 @@ function createChatGPT({ store, openExternal, fetch: request = globalThis.fetch,
 		try {
 			await new Promise((resolve, reject) => {
 				listener.once("error", reject);
-				listener.listen(0, "127.0.0.1", resolve);
+				listener.listen(callbackPort, "127.0.0.1", resolve);
 			});
 			const redirectUri = `http://127.0.0.1:${listener.address().port}/auth/callback`;
 			listener.on("request", async (req, res) => {

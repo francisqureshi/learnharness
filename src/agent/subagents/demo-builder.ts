@@ -51,8 +51,8 @@ receive a brief for ONE interactive teaching instrument and deliver a single sel
 that runs it. You never see the lesson; the brief is everything you know.
 
 Runtime contract (the document runs in a sandboxed iframe, sandbox="allow-scripts", opaque origin):
-- Single file. Vanilla JS + Canvas 2D or SVG. CDN imports (e.g. a plotting or math library) are allowed
-  when they genuinely help — but prefer dependency-free; you own the failure if a CDN import fails.
+- Single file. Vanilla JS + Canvas 2D or SVG. Inline every dependency and asset: verification is
+  offline. No CDN imports, remote fonts, fetches, or other external resources.
 - NO localStorage, sessionStorage, or document.cookie — the sandbox makes them throw.
 - The parent sizes the iframe to the document height automatically; just build normal flowing layout.
   Make the demo fill the width and size its own height sensibly.

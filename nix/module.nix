@@ -14,6 +14,11 @@ in {
       default = 3100;
       description = "Loopback HTTP port; expose only through a private authenticated proxy.";
     };
+    chatgptCallbackPort = lib.mkOption {
+      type = lib.types.port;
+      default = 1455;
+      description = "Loopback ChatGPT callback port; forward the same port over SSH when signing in remotely.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -31,6 +36,7 @@ in {
       environment = {
         HOSTNAME = "127.0.0.1";
         PORT = toString cfg.port;
+        LH_CHATGPT_CALLBACK_PORT = toString cfg.chatgptCallbackPort;
         LH_DATA_DIR = "/var/lib/learnharness/data";
         LH_AUTH_FILE = "/var/lib/learnharness/auth.json";
         XDG_CACHE_HOME = "/var/cache/learnharness";

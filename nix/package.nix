@@ -1,9 +1,10 @@
-{ lib, buildNpmPackage, nodejs_24, makeWrapper, autoPatchelfHook
+{ lib, buildNpmPackage, nodejs_24, makeWrapper, autoPatchelfHook, callPackage
 , stdenv, chromium, fontconfig, makeFontsConf, jetbrains-mono, source-sans }:
 
+let demoBrowser = callPackage ./demo-browser.nix { }; in
 buildNpmPackage {
   pname = "learnharness-server";
-  version = "0.3.9";
+  version = (builtins.fromJSON (builtins.readFile ../package.json)).version;
   nodejs = nodejs_24;
 
   # An allowlist prevents private data, credentials and mobile configuration
@@ -18,7 +19,7 @@ buildNpmPackage {
       ../LICENSE
     ];
   };
-  npmDepsHash = "sha256-KVRv7nerkMrEquLIk+jjNq64/HyZSNWsQnQBTTgHpjE=";
+  npmDepsHash = "sha256-+OlIwC9UD7T15Z03IJjF2cNt9wk0/kqcBbviylWdRIA=";
   nativeBuildInputs = [ makeWrapper autoPatchelfHook ];
   buildInputs = [ stdenv.cc.cc.lib fontconfig ];
   ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
@@ -39,6 +40,7 @@ buildNpmPackage {
     node scripts/build-server.mjs
     node scripts/smoke-provider-runtime.mjs
     node scripts/smoke-demo-runtime.mjs --standalone .next/standalone
+    node_modules/.bin/esbuild src/agent/subagents/headless.ts --bundle --platform=node --packages=external --format=esm --outfile=.next/standalone/src/agent/subagents/headless-check.mjs
   '';
 
   installPhase = ''
@@ -48,6 +50,7 @@ buildNpmPackage {
     # npm retains musl optional packages on glibc; they cannot be used here.
     find "$out/lib/learnharness/node_modules" -depth -type d -name '*linux*musl*' -exec rm -rf {} +
     cp scripts/smoke-{nix-server,provider-runtime,demo-runtime}.mjs "$out/share/learnharness/"
+    cp scripts/smoke-isolated-demo.mjs "$out/share/learnharness/"
     cp tests/fixtures/sample-3page.pdf "$out/share/learnharness/"
     makeWrapper ${nodejs_24}/bin/node "$out/bin/learnharness-server" \
       --add-flags "$out/lib/learnharness/server.js" \
@@ -55,10 +58,12 @@ buildNpmPackage {
       --set-default HOSTNAME 127.0.0.1 \
       --set-default PORT 3100 \
       --set CHROME_PATH ${chromium}/bin/chromium \
+      --set LH_DEMO_BROWSER ${demoBrowser} \
       --set FONTCONFIG_FILE ${makeFontsConf { fontDirectories = [ jetbrains-mono source-sans ]; }}
     makeWrapper ${nodejs_24}/bin/node "$out/bin/learnharness-server-check" \
       --add-flags "$out/share/learnharness/smoke-nix-server.mjs $out" \
       --set CHROME_PATH ${chromium}/bin/chromium \
+      --set LH_DEMO_BROWSER ${demoBrowser} \
       --set FONTCONFIG_FILE ${makeFontsConf { fontDirectories = [ jetbrains-mono source-sans ]; }}
     runHook postInstall
   '';

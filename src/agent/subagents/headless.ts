@@ -236,7 +236,21 @@ async function connectBrowserService(): Promise<import("puppeteer-core").Browser
  *  so concurrent jobs queue here instead of fighting over one webContents. */
 let helperPageChain: Promise<unknown> = Promise.resolve();
 
-async function withBrowserPage<T>(fn: (page: import("puppeteer-core").Page) => Promise<T>): Promise<T> {
+async function withBrowserPage<T>(fn: (page: import("puppeteer-core").Page) => Promise<T>, directory: string): Promise<T> {
+	// Nix shared-server mode must never fall back to an unrestricted helper.
+	if (process.env.LH_DEMO_BROWSER) {
+		const puppeteer = (await import("puppeteer-core")).default;
+		fs.mkdirSync(path.join(directory, "profile"), { mode: 0o700 });
+		const browser = await puppeteer.launch({
+			executablePath: process.env.LH_DEMO_BROWSER,
+			headless: true, pipe: true,
+			userDataDir: path.join(directory, "profile"),
+			env: { LH_DEMO_DIRECTORY: directory },
+			args: ["--disable-dev-shm-usage"],
+		});
+		try { return await fn(await browser.newPage()); }
+		finally { await browser.close().catch(() => {}); }
+	}
 	// Helper first (owner ruling 2026-10-10: the app's own Chromium primary,
 	// system Chrome fallback) — deterministic across users, zero install.
 	const helper = await connectBrowserService();
@@ -316,7 +330,7 @@ async function runDemo(html: string, opts: RunDemoOptions = {}): Promise<DemoRun
 		} catch (err) {
 			pageErrors.push(err instanceof Error ? err.message : String(err));
 		}
-		});
+		}, dir);
 	} finally {
 		try {
 			fs.rmSync(dir, { recursive: true, force: true });
@@ -453,7 +467,7 @@ async function renderSvg(svg: string, opts: RenderSvgOptions = {}): Promise<Buff
 		// provider (see providerSafePng) — the visual-maker feeds this exact
 		// buffer back to the vision model as its only way to "look".
 		return providerSafePng(Buffer.from(shot));
-	}).finally(() => {
+	}, dir).finally(() => {
 		try {
 			fs.rmSync(dir, { recursive: true, force: true });
 		} catch {
