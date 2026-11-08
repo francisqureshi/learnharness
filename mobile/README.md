@@ -90,3 +90,11 @@ lesson, verifies the header retains its screen position, checks the software
 keyboard is visible and the send control remains above it, and saves a screenshot
 in the Xcode test result. Run against isolated server data for repeatable UI checks.
 The browser smoke test cannot validate UIKit keyboard panning.
+
+Mobile Settings opens a full-screen category list. Sections use grouped rows,
+44px control hit areas, and back navigation; provider deep links still open their
+requested section directly. The Mac settings sidebar and persistence APIs remain
+shared. `node scripts/smoke-mobile-settings.mjs ISOLATED_URL` checks all categories,
+widths, switch geometry and save/reopen/restore behavior. Use isolated data because
+that check temporarily changes a graph setting. The iOS test suite also checks
+Settings navigation and editing with the software keyboard open.

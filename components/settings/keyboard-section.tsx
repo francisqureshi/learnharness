@@ -100,7 +100,7 @@ export function KeyboardSection() {
 				const actions = KEYBOARD_ACTIONS.filter((a) => a.scope === scope);
 				if (!actions.length) return null;
 				return (
-					<div key={scope} data-testid={`kbd-scope-${scope}`}>
+					<div key={scope} className="lh-settings-group" data-testid={`kbd-scope-${scope}`}>
 						<p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground/70">{label}</p>
 						<div className="flex flex-col gap-2">
 							{actions.map((def) => {

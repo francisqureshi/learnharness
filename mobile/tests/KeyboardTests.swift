@@ -27,4 +27,33 @@ final class KeyboardTests: XCTestCase {
     let send = app.buttons["Send"].firstMatch
     XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY, "Composer controls must stay above keyboard")
   }
+  func testSettingsNavigationAndKeyboard() throws {
+    let app = XCUIApplication(bundleIdentifier: "net.learnharness.personalpreview")
+    app.launch()
+    let menu = app.buttons["Open sidebar"].firstMatch
+    XCTAssertTrue(menu.waitForExistence(timeout: 20)); menu.tap()
+    let settings = app.buttons.matching(NSPredicate(format: "label ==[c] %@", "Settings")).firstMatch
+    XCTAssertTrue(settings.waitForExistence(timeout: 5)); settings.tap()
+    let appearance = app.buttons["Appearance"].firstMatch
+    XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+    let indexShot = XCTAttachment(screenshot: app.screenshot()); indexShot.lifetime = .keepAlways; add(indexShot)
+    appearance.tap()
+    let back = app.buttons["Back to settings"].firstMatch
+    XCTAssertTrue(back.waitForExistence(timeout: 5))
+    let before = back.frame
+    let field = app.textFields["background hex"].firstMatch
+    XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap()
+    let keyboardReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      app.keyboards.keys.count > 10 && app.keyboards.firstMatch.frame.minY < app.frame.maxY
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [keyboardReady], timeout: 5), .completed)
+    XCTAssertEqual(back.frame.minY, before.minY, accuracy: 3)
+    XCTAssertTrue(back.isHittable)
+    XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY)
+    let editShot = XCTAttachment(screenshot: app.screenshot()); editShot.lifetime = .keepAlways; add(editShot)
+    back.tap()
+    XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+    app.buttons["Close settings"].firstMatch.tap()
+    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+  }
 }

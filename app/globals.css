@@ -665,3 +665,64 @@ html.lh-phone, .lh-phone body { overflow: hidden; }
 .lh-phone [data-attachment-composer] { border-radius: 22px; }
 
 .lh-phone .lh-graph-page > main { top: 56px; }
+
+/* Phone settings use a navigation stack. All persistence and section controls
+   remain shared with desktop; only the presentation changes. */
+.lh-phone [data-testid="settings-backdrop"] {
+	top: var(--lh-phone-top, 0px); bottom: auto; height: var(--lh-phone-height, 100dvh);
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+	background: var(--background);
+}
+.lh-phone [data-testid="settings-dialog"] {
+	width: 100%; max-width: none; height: 100%; max-height: none;
+	border: 0; border-radius: 0; box-shadow: none; background: var(--background);
+	font-family: var(--font-sans3), sans-serif; font-size: 16px; animation: none;
+}
+.lh-settings-phone-header { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; padding: 8px 18px; flex-shrink: 0; }
+.lh-settings-phone-header h2 { text-align: center; font-size: 18px; font-weight: 600; }
+.lh-settings-phone-header button { background: var(--card); border: 1px solid var(--border); }
+.lh-phone [data-testid="settings-nav"] { width: 100%; padding: 24px 18px; border: 0; gap: 0; overflow-y: auto; }
+.lh-phone [data-testid="settings-nav"] button { display: flex; flex-shrink: 0; align-items: center; gap: 14px; min-height: 58px; padding: 12px 18px; border-radius: 0; border-bottom: 1px solid var(--border); background: var(--card); color: var(--foreground); font: inherit; }
+.lh-phone [data-testid="settings-nav"] button:first-child { border-radius: 22px 22px 0 0; }
+.lh-phone [data-testid="settings-nav"] button:last-child { border-radius: 0 0 22px 22px; border-bottom: 0; }
+.lh-phone [data-testid="settings-nav"] svg { width: 21px; height: 21px; flex-shrink: 0; }
+.lh-phone [data-testid="settings-dialog"] [hidden] { display: none; }
+.lh-phone .lh-settings-section { padding: 24px 18px; }
+.lh-phone .lh-settings-section > h2 { display: none; }
+.lh-phone .lh-settings-section > div { margin-top: 0; gap: 20px; }
+.lh-phone .lh-settings-group { border: 0; padding: 0; margin-top: 8px; }
+.lh-phone .lh-settings-group > p { font: inherit; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--foreground); margin: 0 16px 10px; }
+.lh-phone .lh-settings-group > div { gap: 0; border-radius: 22px; padding: 0 16px; background: var(--card); }
+.lh-phone .lh-settings-row { min-height: 60px; padding: 12px 0; gap: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.lh-phone .lh-settings-row:last-child { border-bottom: 0; }
+.lh-phone .lh-settings-row > span:first-child { flex: 1 1 140px; }
+.lh-phone .lh-settings-row > span:first-child > span:first-child { font: inherit; }
+.lh-phone .lh-settings-row > span:first-child > span + span { font-size: 13px; line-height: 1.4; margin-top: 3px; }
+.lh-phone .lh-settings-section button:not([role="switch"]), .lh-phone .lh-settings-section select { min-height: 44px; font-size: 15px; max-width: 100%; }
+.lh-phone .lh-settings-section input:not([type="checkbox"]):not([type="range"]), .lh-phone .lh-settings-section textarea { min-height: 44px; max-width: 100%; }
+.lh-phone .lh-settings-section [role="switch"] { width: 52px; height: 44px; border: 0; background: transparent; }
+.lh-phone .lh-settings-section [role="switch"] > span { width: 28px; height: 28px; top: 8px; left: 0; transform: translateX(2px); background: white; }
+.lh-phone .lh-settings-section [role="switch"][aria-checked="true"] > span { transform: translateX(22px); }
+.lh-phone .lh-settings-section [role="switch"]:disabled { opacity: .45; }
+.lh-phone [data-testid="section-appearance"] > div, .lh-phone [data-testid="section-graph"] > div, .lh-phone [data-testid="section-general"] > div { gap: 0; padding: 0 16px; background: var(--card); border-radius: 22px; }
+.lh-phone [data-testid="section-keys"] [data-testid$="-editor"] { flex-wrap: wrap; padding: 12px 0; }
+.lh-phone [data-testid="section-keys"] [data-testid$="-editor"] > input { flex-basis: 100%; order: 1; }
+.lh-phone [data-testid="section-keys"] [data-testid$="-editor"] > button { order: 2; }
+.lh-phone .lh-settings-row > span:last-child:not(:first-child) { max-width: 100%; flex-wrap: wrap; }
+.lh-phone [data-testid^="slot-row-"] > span:last-child { flex-basis: 100%; }
+/* Keep the iOS-size track inside a 44px hit area. */
+.lh-phone .lh-settings-section [role="switch"]::before { content: ""; position: absolute; inset: 6px 0; border-radius: 999px; background: #606064; }
+.lh-phone .lh-settings-section [role="switch"][aria-checked="true"]::before { background: #30d158; }
+
+.lh-phone .lh-settings-section .font-ui { font-family: inherit; }
+.lh-phone [data-testid="section-keys"] button > .font-ui { font-size: 16px; }
+.lh-phone .lh-settings-section [role="switch"] > span { translate: none; }
+.lh-phone .lh-settings-section [data-testid^="slot-thinking-"] { min-width: 96px; }
+.lh-phone .lh-settings-section .lh-settings-connection-row { min-height: 60px; padding: 8px 0; }
+.lh-phone .lh-settings-section .lh-settings-connection-row > button { margin-left: auto; }
+.lh-phone [data-testid="subscription-connections"] > div + div { border-top: 1px solid var(--border); margin-top: 0; }
+.lh-phone [data-testid="section-keys"] [data-testid$="-status"], .lh-phone [data-testid="dictation-setup-hint"] { font-size: 13px; }
+.lh-phone .lh-settings-connection-backdrop { top: var(--lh-phone-top, 0px); bottom: auto; height: var(--lh-phone-height, 100dvh); padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.lh-phone .lh-settings-connection-dialog { max-height: calc(100% - 24px); border-radius: 22px; font-family: var(--font-sans3), sans-serif; }
+.lh-phone .lh-settings-connection-dialog button { min-height: 44px; }
+.lh-phone [data-testid="claude-code-installation"] > div:first-child { justify-content: space-between; min-height: 60px; }

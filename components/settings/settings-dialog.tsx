@@ -29,6 +29,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { usePhoneLayout } from "@/components/phone-layout";
+import { ArrowLeftIcon, ChevronRightIcon, KeyRoundIcon, BotIcon, PaletteIcon, NetworkIcon, KeyboardIcon, SettingsIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useBackdropDismiss } from "@/components/backdrop-dismiss";
 import {
@@ -65,6 +67,7 @@ const SECTIONS = [
 	{ id: "general", label: "General" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
+const SECTION_ICONS = { keys: KeyRoundIcon, agent: BotIcon, appearance: PaletteIcon, graph: NetworkIcon, keyboard: KeyboardIcon, general: SettingsIcon };
 
 /** `open(section?, row?)` — the optional ROW deep-links into the Keys
  *  section with that row unfolded (zero-keys wave: the dictation error's
@@ -83,9 +86,11 @@ export function SettingsDialogProvider({
 }) {
 	const [show, setShow] = useState(false);
 	const [landOn, setLandOn] = useState<SectionId>("keys");
+	const [showCategories, setShowCategories] = useState(true);
 	const [landOnRow, setLandOnRow] = useState<string | null>(null);
 	const open = useCallback((section?: string, row?: string) => {
 		setLandOn(section ? section as SectionId : "keys");
+		setShowCategories(!section);
 		setLandOnRow(row ?? null);
 		setShow(true);
 	}, []);
@@ -94,7 +99,7 @@ export function SettingsDialogProvider({
 		<ChatGPTUIProvider><NativeSubscriptionUIProvider><DialogContext.Provider value={{ open }}>
 			{children}
 			{show && (
-				<SettingsDialog onClose={() => setShow(false)} initialSection={landOn} initialRow={landOnRow} />
+				<SettingsDialog onClose={() => setShow(false)} initialSection={landOn} initialRow={landOnRow} initialCategoryList={showCategories} />
 			)}
 		</DialogContext.Provider></NativeSubscriptionUIProvider></ChatGPTUIProvider>
 	);
@@ -105,12 +110,14 @@ export function useSettingsDialog() {
 }
 
 function SettingsDialog({
+	initialCategoryList,
 	onClose,
 	initialSection,
 	initialRow,
 }: {
 	onClose: () => void;
 	initialSection: SectionId;
+	initialCategoryList: boolean;
 	/** The keys-section row to unfold (see DialogContext above). */
 	initialRow: string | null;
 }) {
@@ -123,7 +130,7 @@ function SettingsDialog({
 			data-testid="settings-backdrop"
 			{...backdropDismiss}
 		>
-			<SettingsDialogBody onClose={onClose} initialSection={initialSection} initialRow={initialRow} />
+			<SettingsDialogBody onClose={onClose} initialSection={initialSection} initialRow={initialRow} initialCategoryList={initialCategoryList} />
 		</div>,
 		document.body,
 	);
@@ -132,16 +139,21 @@ function SettingsDialog({
 /** The dialog without the portal/backdrop — the SSR-testable frame
  *  (portals render nothing under renderToStaticMarkup). */
 export function SettingsDialogBody({
+	initialCategoryList = false,
 	onClose,
 	initialSection = "keys",
 	initialRow = null,
 }: {
 	onClose: () => void;
 	initialSection?: SectionId;
+	initialCategoryList?: boolean;
 	/** The keys row to unfold on arrival (null = none). While-open
 	 *  retargets follow it exactly like initialSection below. */
 	initialRow?: string | null;
 }) {
+	const phone = usePhoneLayout();
+	const [categoryList, setCategoryList] = useState(initialCategoryList);
+	const backRef = useRef<HTMLButtonElement>(null);
 	const { onAppearanceChange } = useAppearance();
 	const [record, setRecord] = useState<UserSettings | null | undefined>(
 		undefined,
@@ -188,7 +200,21 @@ export function SettingsDialogBody({
 	// nothing.
 	useEffect(() => {
 		setActive(initialSection);
-	}, [initialSection]);
+		setCategoryList(initialCategoryList);
+	}, [initialSection, initialCategoryList, initialRow]);
+	useEffect(() => {
+		if (!phone) return;
+		contentRef.current?.scrollTo?.(0, 0);
+		backRef.current?.focus({ preventScroll: true });
+	}, [phone, categoryList, active]);
+	useEffect(() => {
+		if (!phone) return;
+		const shell = document.querySelector<HTMLElement>(".lh-app-shell");
+		if (!shell) return;
+		const wasInert = shell.inert;
+		shell.inert = true;
+		return () => { shell.inert = wasInert; };
+	}, [phone]);
 
 	// Fetch once per dialog mount. 200 {settings: null} is FIRST BOOT
 	// (no record = factory everything), not a failure — the error state is
@@ -216,12 +242,13 @@ export function SettingsDialogBody({
 				// abort) must not also act. One Esc, one action.
 				e.preventDefault();
 				e.stopPropagation();
-				onClose();
+				if (phone && !categoryList) setCategoryList(true);
+				else onClose();
 			}
 		};
 		document.addEventListener("keydown", onKey);
 		return () => document.removeEventListener("keydown", onKey);
-	}, [onClose]);
+	}, [onClose, phone, categoryList]);
 
 	/** ONE writer for the whole dialog: PUT the whole section, keep the
 	 *  record mirror in sync, surface route errors inline (a 400 is a
@@ -267,13 +294,18 @@ export function SettingsDialogBody({
 		<div
 			role="dialog"
 			aria-modal="true"
-			aria-label="Settings"
+			aria-label={phone && !categoryList ? SECTIONS.find(s => s.id === active)?.label : "Settings"}
 			data-testid="settings-dialog"
 			className="settings-dialog-pop flex h-[620px] max-h-[85vh] w-[920px] max-w-[90vw] flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
 			onClick={(e) => e.stopPropagation()}
 		>
+			{phone && <header className="lh-settings-phone-header">
+				<button ref={backRef} type="button" className="lh-phone-icon" aria-label={categoryList ? "Close settings" : "Back to settings"} onClick={() => categoryList ? onClose() : setCategoryList(true)}><ArrowLeftIcon /></button>
+				<h2>{categoryList ? "Settings" : SECTIONS.find(s => s.id === active)?.label}</h2>
+				<span aria-hidden="true" />
+			</header>}
 			{/* Header — the app's quiet CMU title language. */}
-			<header className="flex h-15 shrink-0 items-center gap-3 border-b border-border px-5">
+			<header className="lh-desktop-header flex h-15 shrink-0 items-center gap-3 border-b border-border px-5">
 				<h2 className="font-title text-2xl tracking-tight">Settings</h2>
 				<Hint
 						// Esc closes the dialog (its own listener) — surface it.
@@ -305,6 +337,7 @@ export function SettingsDialogBody({
 				{/* Left nav — text-only, the session-list mono language,
 					    active = bg-accent. */}
 				<nav
+					hidden={phone && !categoryList}
 					aria-label="Settings sections"
 					data-testid="settings-nav"
 					className="flex w-44 shrink-0 flex-col gap-1 border-r border-border p-2"
@@ -314,15 +347,17 @@ export function SettingsDialogBody({
 							key={s.id}
 							type="button"
 							data-testid={`settings-nav-${s.id}`}
-							aria-current={active === s.id}
+							aria-current={!phone && active === s.id}
 							className={`rounded-sm px-3 py-1.5 text-left font-ui text-sm transition-colors ${
 								active === s.id
 									? "bg-accent text-foreground"
 									: "text-muted-foreground hover:bg-accent hover:text-foreground"
 							}`}
-							onClick={() => setActive(s.id)}
+							onClick={() => { setActive(s.id); setCategoryList(false); }}
 						>
-							{s.label}
+							{phone && (() => { const Icon = SECTION_ICONS[s.id]; return <Icon aria-hidden="true" />; })()}
+							<span>{s.label}</span>
+							{phone && <ChevronRightIcon aria-hidden="true" className="ml-auto" />}
 						</button>
 					))}
 				</nav>
@@ -335,6 +370,7 @@ export function SettingsDialogBody({
 				    nothing may shift when the lock engages. */}
 				<div
 					ref={contentRef}
+					hidden={phone && categoryList}
 					className="min-w-0 flex-1 overflow-y-auto"
 					data-testid="settings-content"
 				>
