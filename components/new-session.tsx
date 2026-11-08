@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneHeader } from "@/components/phone-chrome";
 import { isPhoneLayout } from "@/components/phone-layout";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -158,7 +159,8 @@ export function DraftShell({
 		 * (the only pointer-events-auto spot), the empty state carrying the
 		 * orientation. The chain picker then owns the column top exactly
 		 * like the graph view's — no stacked bars. */
-		<div className="relative flex h-dvh">
+		<div className="lh-draft-page relative flex h-dvh">
+			<PhoneHeader title={mode === "practice" ? "New practice session" : "New lesson"} />
 			{/* Window-drag strip — deliberately FIRST in the DOM (the mask
 			    law: no-drag subtraction resolves by DOM order, so every
 			    carved control later in the tree subtracts correctly). */}
@@ -222,7 +224,7 @@ export function DraftShell({
 			{/* The floating reopen toggle — pointer-events-none except the
 			    toggle itself (home's pattern), painted AFTER the overlay's
 			    column so nothing of it blocks the canvas area. */}
-			<header className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
+			<header className="lh-desktop-header pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
 				<div className="pointer-events-auto">
 					<SidebarToggle />
 				</div>

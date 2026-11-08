@@ -17,6 +17,7 @@ const config = {
     cleartext: false,
     errorPath: "offline.html"
   },
+  plugins: { Keyboard: { resize: "native", autoBackdropColor: "dom" } },
   ios: {
     // The web UI owns safe-area padding; avoid applying UIKit insets twice.
     contentInset: "never",

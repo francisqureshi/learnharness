@@ -1,6 +1,8 @@
 "use client";
 
-import { isPhoneLayout } from "@/components/phone-layout";
+import { PhoneHeader } from "@/components/phone-chrome";
+import { NewSession } from "@/components/new-session";
+import { isPhoneLayout, usePhoneLayout } from "@/components/phone-layout";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -26,7 +28,12 @@ import type { TurnUsage } from "@/src/core";
  * under the header and the new-session dock, both of which float over it
  * with no gradient scrims. Sessions live in the toggleable sidebar.
  */
-export function Home({
+export function Home({ initialConfigured, rendering = true, showGraphOnPhone = false }: { initialConfigured: boolean; rendering?: boolean; showGraphOnPhone?: boolean }) {
+	const phone = usePhoneLayout();
+	return phone && !showGraphOnPhone ? <NewSession initialConfigured={initialConfigured} /> : <GraphHome initialConfigured={initialConfigured} rendering={rendering} />;
+}
+
+function GraphHome({
 	initialConfigured,
 	rendering = true,
 }: {
@@ -160,7 +167,8 @@ export function Home({
 	};
 
 	return (
-		<div className="relative h-dvh">
+		<div className="lh-graph-page relative h-dvh">
+			<PhoneHeader title="Knowledge graph" />
 			{/* Window-drag strip (merged chrome, owner 2026-09-17): a dedicated
 			    mask element, deliberately FIRST in the DOM. Electron's app-region
 			    mask resolves by DOM order — a no-drag element subtracts only drag
@@ -202,7 +210,7 @@ export function Home({
 			    no app-region of its own: the strip's drag comes from the mask
 			    div above, and the toggle's lh-no-drag subtracts from it (it is
 			    later in the tree, so the subtraction sticks). */}
-			<header className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
+			<header className="lh-desktop-header pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
 				<div className="pointer-events-auto">
 					<SidebarToggle />
 				</div>

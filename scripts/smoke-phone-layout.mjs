@@ -10,6 +10,12 @@ try {
   await page.evaluateOnNewDocument(() => localStorage.setItem('lh:sidebar-open','1'));
   await page.goto(origin);
   await page.waitForSelector('html.lh-phone');
+  await page.waitForSelector('[data-testid="phone-header"]');
+  assert.equal(await page.$eval('[data-testid="stats-bar"]', el => el.getBoundingClientRect().height), 0, 'Model controls belong in closed options');
+  await page.click('[aria-label="Lesson options"]');
+  assert.ok(await page.$eval('[data-testid="stats-bar"]', el => el.getBoundingClientRect().height) > 0);
+  await page.click('[aria-label="Close options"]');
+  assert.ok(await page.$('[data-testid="composer"] .lh-phone-dictation [data-testid="dictation-toggle"]'), 'Dictation belongs inside composer');
   const frame = () => page.evaluate(() => ({
     sidebar: document.querySelector('aside').getBoundingClientRect().width,
     main: document.querySelector('main').getBoundingClientRect().width,

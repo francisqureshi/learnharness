@@ -1,5 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
+import { usePhoneChrome } from "@/components/phone-chrome";
+import { usePhoneLayout } from "@/components/phone-layout";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CLAUDE_CODE_PROVIDER, sessionCacheHitRate, subscriptionLabels, subscriptionLabel, type cliContextWindowOf, type SessionPricing, type TurnUsage } from "@/src/core";
 import { formatTokens, formatUsd, planCostLabel, prettyModel } from "@/components/usage-format";
@@ -68,6 +71,8 @@ export function StatsBar({
 	 *  data (which renders nothing pre-chat on that surface). */
 	leadingSlot?: ReactNode;
 }) {
+	const phone = usePhoneLayout();
+	const { menuHost, dictationHost } = usePhoneChrome();
 	const [open, setOpen] = useState(false);
 	const [selectedModel, setSelectedModel] = useState<string | undefined>();
 	const modelChanged = useCallback((model: string | undefined) => {
@@ -113,7 +118,7 @@ export function StatsBar({
 	const cliBilled = turns.some((turn) => turn.model.startsWith(`${CLAUDE_CODE_PROVIDER}:`));
 	const costLabel = planCostLabel(pricedCount > 0 ? cost : null, cliBilled ? [...providers, "CLI"] : providers);
 
-	return (
+	const controls = (
 		<div
 			data-testid="stats-bar"
 			// pointer-events-auto: the sticky composer wrapper is pointer-events-none
@@ -216,7 +221,7 @@ export function StatsBar({
 			{/* The middle slot: dictation (owner, 2026-09-17). flex-1 lets the
 			    meter expand into the row's free width; justify-center keeps the
 			    lone idle mic button visually centered. */}
-			{dictationSlot && (
+			{!phone && dictationSlot && (
 				<div className="flex min-w-0 flex-1 items-center justify-center">{dictationSlot}</div>
 			)}
 			{/* The model + thinking control — one controller for the conversation
@@ -225,4 +230,9 @@ export function StatsBar({
 			<ModelControl chatId={chatId} onModelChange={modelChanged} />
 		</div>
 	);
+  if (!phone) return controls;
+  return <>
+    {menuHost && createPortal(controls, menuHost)}
+    {dictationSlot && (dictationHost ? createPortal(dictationSlot, dictationHost) : <div className="lh-phone-question-dictation">{dictationSlot}</div>)}
+  </>;
 }

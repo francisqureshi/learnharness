@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneHeader } from "@/components/phone-chrome";
 import { isPhoneLayout } from "@/components/phone-layout";
 
 import { createContext, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1293,7 +1294,9 @@ export function Chat({
 				    60px is an ALIGNMENT, not just a size: it equals the sidebar's
 				    LH wordmark band, so the header's border-b continues that
 				    band's bottom edge as one line across the app (owner, round 6). */}
+				<PhoneHeader title={titleText}>{planTree && <button type="button" className="py-3 text-left" onClick={() => setPlanOpen(true)}>Lesson plan</button>}</PhoneHeader>
 				<TopBar
+					className="lh-desktop-header"
 					// While renaming the bar is NOT a drag surface: app-region:drag
 					// would eat the mousedown, so click-to-escape (below) could
 					// never fire. Rename mode is interactive mode (owner ask) —

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { PhoneChromeProvider } from "@/components/phone-chrome";
 import { usePhoneLayout } from "@/components/phone-layout";
 import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
@@ -109,14 +110,22 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 		if (!phone) return;
 		const html = document.documentElement;
 		html.classList.add("lh-phone");
-		const resize = () => html.style.setProperty("--lh-phone-height", `${window.visualViewport?.height ?? window.innerHeight}px`);
+		const resize = () => {
+			html.style.setProperty("--lh-phone-height", `${window.visualViewport?.height ?? window.innerHeight}px`);
+			// WebKit pans the visual viewport to reveal focused editors. Follow
+			// its origin as well as its height so the header stays on screen.
+			html.style.setProperty("--lh-phone-top", `${window.visualViewport?.offsetTop ?? 0}px`);
+		};
 		resize();
 		window.visualViewport?.addEventListener("resize", resize);
+		window.visualViewport?.addEventListener("scroll", resize);
 		window.addEventListener("resize", resize);
 		return () => {
 			html.classList.remove("lh-phone");
 			html.style.removeProperty("--lh-phone-height");
+			html.style.removeProperty("--lh-phone-top");
 			window.visualViewport?.removeEventListener("resize", resize);
+			window.visualViewport?.removeEventListener("scroll", resize);
 			window.removeEventListener("resize", resize);
 		};
 	}, [phone]);
@@ -762,6 +771,7 @@ function SessionsSidebar() {
 						Teaching
 						<span className="sr-only">create a new teaching session</span>
 					</button>
+					{phone && <Link href="/?view=graph" onClick={closePhone} className="block px-2 py-3 text-sm">Knowledge graph</Link>}
 					<button
 						type="button"
 						data-testid="new-session-practice"
@@ -1003,6 +1013,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const { phone, open, closePhone } = useSidebar();
 	return (
 		<SettingsDialogProvider>
+		<PhoneChromeProvider>
 			{phone && open && <button type="button" aria-label="Close sidebar backdrop" className="lh-phone-backdrop" onClick={closePhone} tabIndex={-1} />}
 			<SessionsSidebar />
 			<FilePathDropZone inert={phone && open} className="relative min-w-0 flex-1">{children}</FilePathDropZone>
@@ -1010,6 +1021,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			    after the content in the tree, but it's window-level so order only
 			    matters for the events it dispatches, never for DOM priority. */}
 			<KeyboardShortcuts />
+		</PhoneChromeProvider>
 		</SettingsDialogProvider>
 	);
 }

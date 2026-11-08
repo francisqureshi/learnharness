@@ -45,7 +45,8 @@ from Xcode to renew it. No paid membership is needed for this personal test.
   to avoid applying the safe area twice. Mac layout behavior is unchanged.
 - Test microphone permission, dictation, keyboard layout, external sign-in,
   file uploads, and reconnection after locking the phone on a real device.
-- No native plugins are installed. External destinations are not broadly allowlisted.
+- The native Keyboard plugin resizes the webview above the iOS keyboard and
+  removes the form accessory bar. External destinations are not broadly allowlisted.
 - Provider credentials must be configured on the server before starting lessons.
 - The static connection-error page is bundled locally and offers recovery steps.
 
@@ -68,3 +69,24 @@ profiles out of the repository. If signing fails in SSH with `errSecInternalComp
 run the build in the signed-in Mac user's local Terminal so Keychain can prompt.
 After installation, iOS may also require trusting your Apple ID under Settings →
 General → VPN & Device Management before the first launch.
+
+## iOS keyboard regression
+
+Boot the chosen simulator explicitly and install the preview using its UUID
+(`simctl boot UUID`, `simctl bootstatus UUID -b`, `simctl install UUID App.app`).
+Avoid the ambiguous `booted` alias when several simulators are open. Select Simulator → I/O → Keyboard →
+Connect Hardware Keyboard **off**, so this tests the full software keyboard.
+With XcodeGen installed, run from `mobile/tests`:
+
+```sh
+xcodegen generate
+xcodebuild -project LearnHarnessKeyboard.xcodeproj -scheme KeyboardTests \
+  -destination 'platform=iOS Simulator,id=YOUR_SIMULATOR_ID' \
+  -parallel-testing-enabled NO -derivedDataPath /tmp/learnharness-keyboard-tests test
+```
+
+The test opens the installed preview, focuses its composer without submitting a
+lesson, verifies the header retains its screen position, checks the software
+keyboard is visible and the send control remains above it, and saves a screenshot
+in the Xcode test result. Run against isolated server data for repeatable UI checks.
+The browser smoke test cannot validate UIKit keyboard panning.

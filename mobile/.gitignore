@@ -5,3 +5,4 @@ ios/App/App/public/
 ios/App/CapApp-SPM/.build/
 ios/**/xcuserdata/
 ios/build/
+tests/*.xcodeproj/
