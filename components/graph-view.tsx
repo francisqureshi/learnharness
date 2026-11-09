@@ -1,4 +1,5 @@
 "use client";
+import { useSystemAppearance } from "./system-appearance";
 
 /**
  * The home knowledge-graph view (W4; vision §1 "Rendering (DECIDED)").
@@ -940,6 +941,7 @@ export function GraphView({
 	onPracticeSelectionChange?: (nodes: { id: string; name: string; statement: string }[]) => void;
 	onChainSelectClose?: () => void;
 }) {
+	const mode = useSystemAppearance();
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const cardRef = useRef<HTMLDivElement | null>(null);
@@ -1408,6 +1410,13 @@ export function GraphView({
 			fontFamily: getComputedStyle(document.body).fontFamily,
 		});
 	}, [snapshot, isEmpty]);
+
+	useEffect(() => {
+		rendererRef.current?.setColors({
+			node: tokenHex(NODE_COLOR_TOKEN), edge: tokenHex("--ring"),
+			label: tokenHex("--muted-foreground"), hoverText: tokenHex("--foreground"),
+		});
+	}, [mode, isEmpty]);
 
 	// Feed #2 — settings: just marks the frame dirty. No rebuild, no
 	// re-layout, no camera touch (the whole point of the new renderer).

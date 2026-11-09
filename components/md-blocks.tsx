@@ -27,6 +27,7 @@
  * EXPAND icon (opens the session overlay) when a chat page is mounted.
  */
 
+import { useSystemAppearance } from "./system-appearance";
 import { cloneElement, isValidElement, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { CheckIcon, CopyIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,7 @@ export function codeSource(children: ReactNode): string {
  *  still streaming (the trailing open fence), a quiet skeleton instead of a
  *  doomed parse. */
 function MermaidInline({ chart }: { chart: string }) {
+	const mode = useSystemAppearance();
 	const [svg, setSvg] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [attempt, setAttempt] = useState(0);
@@ -166,7 +168,7 @@ function MermaidInline({ chart }: { chart: string }) {
 		let cancelled = false;
 		setSvg(null);
 		setError(null);
-		renderMermaid(chart)
+		renderMermaid(chart, mode)
 			.then((s) => {
 				if (!cancelled) setSvg(s);
 			})
@@ -176,7 +178,7 @@ function MermaidInline({ chart }: { chart: string }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [chart, attempt, incomplete]);
+	}, [chart, attempt, incomplete, mode]);
 
 	if (incomplete || (svg === null && error === null)) {
 		return (

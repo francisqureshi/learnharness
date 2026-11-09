@@ -67,8 +67,7 @@
 	--lh-heading-weight: 900;
 }
 
-/* The app is always dark (<html class="dark">); mirror the same values so
-   the block stays coherent under Tailwind's variant. */
+/* Dark system appearance also activates Tailwind’s dark variants. */
 .dark {
 	--background: #141414;
 	--foreground: #e6e6e6;
@@ -726,3 +725,34 @@ html.lh-phone, .lh-phone body { overflow: hidden; }
 .lh-phone .lh-settings-connection-dialog { max-height: calc(100% - 24px); border-radius: 22px; font-family: var(--font-sans3), sans-serif; }
 .lh-phone .lh-settings-connection-dialog button { min-height: 44px; }
 .lh-phone [data-testid="claude-code-installation"] > div:first-child { justify-content: space-between; min-height: 60px; }
+
+/* Kanso Pearl: webhooked/kanso.nvim, MIT (components/themes/LICENSE.kanso).
+   Media-query tokens choose the correct palette before hydration, and switch
+   immediately when the OS changes appearance. */
+@media (prefers-color-scheme: light) {
+	:root {
+		color-scheme: light;
+		--lh-mark-ink: #24262d;
+		--background: #f2f1ef;
+		--foreground: #24262d;
+		--card: #e2e1df;
+		--card-foreground: #24262d;
+		--popover: #f2f1ef;
+		--popover-foreground: #24262d;
+		--primary: #24262d;
+		--primary-foreground: #f2f1ef;
+		--secondary: #e2e1df;
+		--secondary-foreground: #24262d;
+		--muted: #e2e1df;
+		--muted-foreground: #6d6d69;
+		--accent: #dddddb;
+		--accent-foreground: #24262d;
+		--destructive: #c84053;
+		--border: #c9cbd1;
+		--input: #9f9f99;
+		--ring: #766b90;
+	}
+	[data-streamdown="inline-code"], [data-streamdown="code-block"] {
+		background: var(--card);
+	}
+}

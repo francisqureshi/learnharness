@@ -412,3 +412,13 @@ describe("composeQuizMechanics (the segmented control's write)", () => {
 		}
 	});
 });
+
+ it("Pearl ignores dark color overrides while preserving shared typography", () => {
+	const a = resolveAppearance({background: "#123456", proseFontSize: 20,
+		mdRendering: {boldColor: "#ffffff", italicColor: "#eeeeee"}});
+	const vars = appearanceVars(a, "light");
+	assert.equal(vars["--background"], undefined);
+	assert.ok(!Object.values(vars).includes("#ffffff"));
+	assert.ok(Object.values(vars).includes("20px"));
+	assert.equal(appearanceVars(a, "dark")["--background"], "#123456");
+});
