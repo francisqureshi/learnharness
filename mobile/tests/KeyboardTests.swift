@@ -1,5 +1,27 @@
 import XCTest
 final class KeyboardTests: XCTestCase {
+  func testReturnInsertsNewline() throws {
+    let app = XCUIApplication(bundleIdentifier: "net.learnharness.personalpreview")
+    app.launch()
+    let menu = app.buttons["Open sidebar"].firstMatch
+    XCTAssertTrue(menu.waitForExistence(timeout: 20)); menu.tap()
+    let newLesson = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "create a new teaching session")).firstMatch
+    XCTAssertTrue(newLesson.waitForExistence(timeout: 10)); newLesson.tap()
+    let editor = app.textViews.firstMatch
+    XCTAssertTrue(editor.waitForExistence(timeout: 10)); editor.tap()
+    let tutorial = app.buttons["Continue"].firstMatch
+    if tutorial.waitForExistence(timeout: 2) { tutorial.tap() }
+    editor.tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+    app.typeText("First line\nSecond line")
+    let multiline = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      (editor.value as? String) == "First line\nSecond line"
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [multiline], timeout: 10), .completed)
+    XCTAssertTrue(app.buttons["Send"].firstMatch.isHittable)
+    let shot = XCTAttachment(screenshot: app.screenshot()); shot.lifetime = .keepAlways; add(shot)
+  }
+
   // Run against the isolated resume fixture, whose shared last lesson has a
   // pending quiz. This writes only an unsent device-local draft.
   func testResumeDraftAfterRelaunch() throws {

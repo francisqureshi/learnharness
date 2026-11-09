@@ -124,3 +124,9 @@ only to isolated fixtures and restores them afterward. The optional XCUITest
 `testResumeDraftAfterRelaunch` requires that fixture's pending quiz as the shared
 last lesson; it verifies an actual WKWebView relaunch and background/foreground.
 Physical iPhone lock/unlock and Wi-Fi/cellular handoff remain device acceptance.
+
+On iOS/iPadOS, Return inserts a newline in multiline text fields and never invokes
+lesson submit shortcuts. Use the explicit Send/Submit answer button. Mac keyboard
+shortcuts are unchanged. `scripts/smoke-ios-return.mjs LOOPBACK_URL` verifies both
+newline editing and the explicit Send button (submission requests are intercepted).
+`testReturnInsertsNewline` exercises the actual iOS keyboard in an isolated preview.

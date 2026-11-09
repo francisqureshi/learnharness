@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { parseHTML } from "linkedom";
 import { renderToStaticMarkup } from "react-dom/server";
+import { isIOSKeyboard } from "../components/keyboard-platform.ts";
 import { PathInput, INSERT_FILE_PATHS_EVENT } from "../components/path-input.tsx";
 import {
 	PATH_CARET_ATTRIBUTE, PATH_SOURCE_ATTRIBUTE, PathInputHistory, adjacentPathRange, atomicPathRange,
@@ -626,4 +627,35 @@ test("single-line IME sanitizes after completion, and queued external assignment
 	await f.event("compositionend");
 	assert.equal(readPathInput(f.root), "externalvalue");
 	assert.deepEqual(f.writes, ["a中文"]);
+});
+
+
+test("iOS Return inserts a newline without reaching submit handlers; Mac Enter still reaches them", async () => {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+	try {
+		Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)", maxTouchPoints: 5 } });
+		const f = await fixture("first line");
+		f.select(10);
+		let bubbled = 0;
+		f.doc.addEventListener("keydown", () => { bubbled++; });
+		const enter = await f.event("keydown", { key: "Enter" });
+		assert.equal(enter.defaultPrevented, false, "native editing must receive Return");
+		assert.equal(f.keys, 0, "field submit handler must not run");
+		assert.equal(bubbled, 0, "document submit shortcuts must not run");
+		await f.event("beforeinput", { inputType: "insertParagraph" });
+		assert.equal(f.value, "first line\n");
+		Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X)", maxTouchPoints: 0 } });
+		await f.event("keydown", { key: "Enter" });
+		assert.equal(f.keys, 1, "desktop shortcut stays available");
+	} finally {
+		if (previous) Object.defineProperty(globalThis, "navigator", previous);
+		else Reflect.deleteProperty(globalThis, "navigator");
+	}
+});
+
+
+test("iPadOS desktop user agent uses newline behavior without changing real Macs", () => {
+	assert.equal(isIOSKeyboard({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X)", maxTouchPoints: 5 }), true);
+	assert.equal(isIOSKeyboard({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X)", maxTouchPoints: 0 }), false);
+	assert.equal(isIOSKeyboard({ userAgent: "Mozilla/5.0 (Macintosh) Electron/40", maxTouchPoints: 5 }), false);
 });

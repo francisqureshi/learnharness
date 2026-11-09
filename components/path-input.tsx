@@ -1,5 +1,6 @@
 "use client";
 
+import { isIOSKeyboard } from "./keyboard-platform";
 import { isPhoneLayout } from "@/components/phone-layout";
 
 import * as React from "react";
@@ -289,6 +290,12 @@ export const PathInput = React.forwardRef<HTMLDivElement, PathInputProps>(functi
 			className={cn("block w-full min-w-0 outline-none data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-foreground data-[empty=true]:before:content-[attr(data-placeholder)]", singleLine ? "whitespace-pre break-normal overflow-x-auto overflow-y-hidden" : "whitespace-pre-wrap break-words overflow-y-auto", className)}
 			onKeyDown={(event) => {
 				if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) { event.stopPropagation(); return; }
+				// iOS Return edits text. Leave beforeinput to insert the newline;
+				// neither the field's submit shortcut nor document handlers own it.
+				if (event.key === "Enter" && isIOSKeyboard()) {
+					event.stopPropagation();
+					return;
+				}
 				onKeyDown?.(event);
 			}}
 			onFocus={(event) => { controllerRef.current?.remember(); onFocus?.(event); }}
