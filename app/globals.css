@@ -756,3 +756,12 @@ html.lh-phone, .lh-phone body { overflow: hidden; }
 		background: var(--card);
 	}
 }
+
+/* Plan connectors retain their geometry and weight in Pearl; white is only
+   appropriate for the dark palette. Keep upcoming edges slightly quieter. */
+@media (prefers-color-scheme: light) {
+	svg[aria-label="Plan diagram"] path[marker-end] { stroke: #545464; }
+	svg[aria-label="Plan diagram"] path[marker-end].stroke-border { stroke: #6d6d69; }
+	svg[aria-label="Plan diagram"] marker path.fill-white { fill: #545464; }
+	svg[aria-label="Plan diagram"] marker path.fill-border { fill: #6d6d69; }
+}
