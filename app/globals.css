@@ -765,3 +765,19 @@ html.lh-phone, .lh-phone body { overflow: hidden; }
 	svg[aria-label="Plan diagram"] marker path.fill-white { fill: #545464; }
 	svg[aria-label="Plan diagram"] marker path.fill-border { fill: #6d6d69; }
 }
+
+/* Expanded phone questions use the available keyboard-adjusted column. Keep
+   reading drafts mounted, but reserve the visible space for answering. */
+.lh-phone [data-phone-answer="expanded"] { padding-bottom: 8px; }
+.lh-phone [data-phone-answer="expanded"] [data-testid="reading-thinking-field"] { display: none; }
+.lh-phone [data-phone-answer="expanded"] [data-dock-scroll-area] {
+ min-height: var(--dock-max-h, 0px);
+ overscroll-behavior: contain;
+}
+.lh-phone [data-phone-answer="expanded"] [data-testid="question-dock"] form [contenteditable="true"] {
+ min-height: 40px;
+ max-height: 96px;
+ overflow-y: auto;
+}
+.lh-phone [data-phone-answer="expanded"] .lh-answer-key-hint { display: none; }
+.lh-phone [data-phone-answer="expanded"] .lh-phone-dictation { flex: 1; }

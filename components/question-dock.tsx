@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
 import { isIOSKeyboard, useIOSKeyboard } from "./keyboard-platform";
 import { useEnterSubmits } from "@/components/enter-submits";
+import { PhoneDictationSlot } from "@/components/phone-chrome";
 import { PathInput } from "@/components/path-input";
 import { MalformedQuestion } from "@/components/malformed-question";
 import { ToolContentResponse } from "@/components/ai-elements/message";
@@ -920,7 +921,8 @@ function QuestionDockForm({
 						/>
 					)}
 					<div className="flex items-center justify-between gap-2 p-1">
-						<span aria-hidden className="pl-1.5 text-xs text-muted-foreground">
+						{active && <PhoneDictationSlot />}
+						<span aria-hidden className="lh-answer-key-hint pl-1.5 text-xs text-muted-foreground">
 								{compactionRunning ? "compacting session…" : iosKeyboard ? "↵ newline" : "↵ submits · ⇧↵ newline"}
 						</span>
 						<Button
