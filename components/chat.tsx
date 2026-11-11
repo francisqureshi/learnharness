@@ -33,6 +33,7 @@ import { useEnterSubmits } from "@/components/enter-submits";
 import { blurAfterPointerClick } from "@/components/focus-hygiene";
 import { dockStateKey } from "@/components/dock-state-key";
 import { clearOpeningPrompt, readOpeningPromptEntry, stashOpeningPrompt, OPENING_PROMPT_FAILURE } from "@/components/opening-prompt";
+import { usePhoneLayout } from "@/components/phone-layout";
 import { forwardDockWheel, useDockHeight } from "@/components/dock-height";
 import { QueuedSteersBody, type QueuedSteerLine } from "@/components/queued-steers";
 import { DictationBar, finishDictation, joinDictation, useDictation } from "@/components/dictation";
@@ -2044,6 +2045,8 @@ function DockOverlay({
 	// Teach-phase mount (session reload with a pending check): the dock starts
 	// as the collapsed invitation too — the check must not pop open on reload.
 	const [expanded, setExpanded] = useState(!requiresReveal);
+	const phoneDismissedRef = useRef(false);
+	const phone = usePhoneLayout();
 	// Reveal state (W5): false until the learner clicks the invitation. While
 	// false, the scroll machine must NOT auto-expand at the bottom — the
 	// learner reads the teaching first and opens the check when ready. Once
@@ -2067,6 +2070,7 @@ function DockOverlay({
 	if (pendingId !== prevPendingIdRef.current) {
 		const wasQuestion = prevPendingIdRef.current !== null;
 		prevPendingIdRef.current = pendingId;
+		phoneDismissedRef.current = false;
 		if (pendingId && requiresReveal) {
 			const arrival = revealArrival(wasQuestion);
 			setExpanded(arrival.expanded);
@@ -2247,6 +2251,7 @@ function DockOverlay({
 		});
 	};
 	const expandAndReveal = () => {
+		phoneDismissedRef.current = false;
 		setRevealed(true); // the teach-check invitation was accepted (W5)
 		setExpanded(true);
 		void suppressFoldDuringReveal();
@@ -2306,6 +2311,7 @@ function DockOverlay({
 				// left the bottom.
 				if (d > COLLAPSE_DIST && !expandIntentRef.current && !atBottomRef.current) setExpanded(false);
 			} else if (d < EXPAND_DIST) {
+				if (phoneDismissedRef.current) return;
 				// Teach checks stay collapsed until the learner opens them (W5): the
 				// at-bottom auto-expand would pop the form over the teaching.
 				if (requiresRevealRef.current && !revealedRef.current) return;
@@ -2382,7 +2388,16 @@ function DockOverlay({
 	return (
 		<div className="pointer-events-none absolute inset-x-0 bottom-0" style={{ right: sbInset }}>
 			<div className="h-24 bg-gradient-to-t from-background via-background/85 to-transparent" />
-			<div ref={blockRef} data-phone-answer={pending && expanded ? "expanded" : undefined} className="relative bg-background pb-5">
+			<div ref={blockRef} data-phone-answer={(pending || practice) && expanded ? "expanded" : undefined} className="relative bg-background pb-5">
+				{(pending || practice) && expanded && <button
+					type="button" aria-label="Back to lesson" className="lh-phone-answer-dismiss"
+					onClick={async () => {
+						phoneDismissedRef.current = true;
+						if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+						await finishDictation();
+						setExpanded(false);
+					}}
+				/>}
 				<div className={DOCK}>
 					<div ref={viewportRef} data-dock-viewport="" className="pointer-events-auto">
 					<div ref={bodyRef}>
@@ -2411,7 +2426,7 @@ function DockOverlay({
 										}
 									: undefined
 							}
-							claim={revealPending}
+							claim={phone ? !expanded : revealPending}
 						/>
 					)}
 					<div ref={shellRef} data-attachment-composer="" className="pointer-events-auto overflow-hidden rounded-2xl border bg-card shadow-lg">
@@ -2435,7 +2450,7 @@ function DockOverlay({
 									initialDraft={initialQuestionDraft}
 									onSaveDraft={onSaveQuestionDraft}
 									onEscape={dictationCancel}
-									dictationClaim={!revealPending}
+									dictationClaim={phone ? expanded : !revealPending}
 									compactionRunning={compactionRunning}
 								/>
 							) : practice ? (
@@ -2444,6 +2459,7 @@ function DockOverlay({
 									input={practice.input as { statement: string }}
 									expanded={expanded}
 									onExpand={() => {
+										phoneDismissedRef.current = false;
 										setExpanded(true);
 										void suppressFoldDuringReveal();
 									}}

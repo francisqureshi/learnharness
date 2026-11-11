@@ -62,7 +62,7 @@ export function syncDockHeight(elements: DockHeightElements, expanded: boolean) 
 	const questionStyle = question ? getComputedStyle(question) : null;
 	const budget = dockHeightBudget({
 		columnHeight: column.clientHeight,
-		edgeGap: document.documentElement.classList.contains("lh-phone") && block.dataset.phoneAnswer === "expanded" ? 8 : 32,
+		edgeGap: document.documentElement.classList.contains("lh-phone") && block.dataset.phoneAnswer === "expanded" ? 44 : 32,
 		outsideHeight: Math.max(height(block) - height(viewport), 0),
 		beforeShellHeight: Math.max(height(body) - height(shell), 0),
 		shellBorderHeight: pixels(shellStyle.borderTopWidth) + pixels(shellStyle.borderBottomWidth),

@@ -2,6 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { joinDictation, useDictationTarget } from "@/components/dictation";
+import { PhoneDictationSlot } from "@/components/phone-chrome";
 import { PathInput } from "@/components/path-input";
 
 /**
@@ -105,6 +106,7 @@ export function ReadingThinkingField({
 				placeholder="Whatever comes to mind as you read."
 				className="field-sizing-content lh-input max-h-40 w-full resize-none bg-transparent py-0.5 outline-none placeholder:text-muted-foreground/70"
 			/>
+			{claim && <div className="lh-reading-toolbar"><PhoneDictationSlot /></div>}
 		</div>
 	);
 }

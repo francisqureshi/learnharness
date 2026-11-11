@@ -781,3 +781,16 @@ html.lh-phone, .lh-phone body { overflow: hidden; }
 }
 .lh-phone [data-phone-answer="expanded"] .lh-answer-key-hint { display: none; }
 .lh-phone [data-phone-answer="expanded"] .lh-phone-dictation { flex: 1; }
+
+/* Touch dismissal remains outside the bubble and never submits a draft. */
+.lh-phone-answer-dismiss, .lh-mobile-submit-icon, .lh-reading-toolbar { display: none; }
+.lh-phone .lh-phone-answer-dismiss { display: block; position: absolute; bottom: 100%; left: 0; width: 100%; height: 44px; pointer-events: auto; background: transparent; z-index: 2; }
+.lh-phone [data-phone-answer="expanded"] .pointer-events-auto.bottom-full { display: none; }
+.lh-phone .lh-mobile-submit-icon { display: block; width: 24px; height: 24px; }
+.lh-phone .lh-desktop-submit-label, .lh-phone .lh-answer-key-hint { display: none; }
+.lh-phone [data-testid="thinking-field"], .lh-phone [data-testid="answer-field"], .lh-phone [data-testid="practice-thinking-field"], .lh-phone [data-testid="reading-thinking-field"] { border-radius: 24px; padding: 8px; }
+.lh-phone .lh-composer { padding: 12px; gap: 8px; }
+.lh-phone [data-attachment-composer]:has(.lh-composer) { border-radius: 28px; }
+.lh-phone [data-testid="question-dock"] button[type="submit"], .lh-phone [data-testid="practice-send"], .lh-phone .lh-composer > button[aria-label="Send"], .lh-phone .lh-composer > button[aria-label="Stop"] { border-radius: 50%; width: 44px; height: 44px; min-width: 44px; padding: 0; }
+.lh-phone [data-testid="practice-thinking-field"] [contenteditable] { min-height: 40px; max-height: 96px; }
+.lh-phone .lh-reading-toolbar { display: flex; justify-content: flex-end; }

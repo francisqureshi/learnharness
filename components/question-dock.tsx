@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowDownIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
 import { isIOSKeyboard, useIOSKeyboard } from "./keyboard-platform";
@@ -926,11 +926,11 @@ function QuestionDockForm({
 								{compactionRunning ? "compacting session…" : iosKeyboard ? "↵ newline" : "↵ submits · ⇧↵ newline"}
 						</span>
 						<Button
-							type="submit"
+							type="submit" aria-label="Submit answer"
 							disabled={!canSubmit || compactionRunning}
 							className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
 						>
-							Submit answer
+							<span className="lh-desktop-submit-label">Submit answer</span><ArrowUpIcon className="lh-mobile-submit-icon" />
 						</Button>
 					</div>
 				</div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { ArrowRightIcon, CornerDownLeftIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowRightIcon, CornerDownLeftIcon, SquareIcon } from "lucide-react";
 import { PhoneDictationSlot } from "@/components/phone-chrome";
 import { cn } from "@/lib/utils";
 import { PathInput } from "@/components/path-input";
@@ -223,7 +223,7 @@ export function Composer({
 								: "bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40",
 						)}
 					>
-						{busy && !canSend ? <SquareIcon className="size-4" /> : <CornerDownLeftIcon className="size-5" />}
+						{busy && !canSend ? <SquareIcon className="size-4" /> : <><CornerDownLeftIcon className="size-5 lh-desktop-submit-label" /><ArrowUpIcon className="lh-mobile-submit-icon" /></>}
 					</button>
 				)}
 		</form>

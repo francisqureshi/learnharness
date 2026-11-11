@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronRightIcon } from "lucide-react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import { joinDictation, useDictationTarget } from "@/components/dictation";
 import { useIOSKeyboard } from "./keyboard-platform";
 import { useEnterSubmits } from "@/components/enter-submits";
+import { PhoneDictationSlot } from "@/components/phone-chrome";
 import { PathInput } from "@/components/path-input";
 import { readLessonLocal, writeLessonLocal } from "./lesson-local";
 import { cn } from "@/lib/utils";
@@ -164,17 +165,18 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 				    one p-1 row. Corner radii concentric: shell 16 − m-1.5 (6) =
 				    field 10 − p-1 (4) = button 6. */}
 				<div className="flex items-center justify-between gap-2 p-1">
-					<span aria-hidden className="pl-1.5 text-xs text-muted-foreground">
+					<PhoneDictationSlot />
+					<span aria-hidden className="lh-answer-key-hint pl-1.5 text-xs text-muted-foreground">
 						{compactionRunning ? "compacting session…" : iosKeyboard ? "↵ newline" : "↵ submits · ⇧↵ newline"}
 					</span>
 					<Button
 						type="button"
-						data-testid="practice-send"
+						data-testid="practice-send" aria-label="Submit thinking"
 						disabled={thinking.trim().length === 0 || compactionRunning}
 						onClick={() => submit()}
 						className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
 					>
-						Submit thinking
+						<span className="lh-desktop-submit-label">Submit thinking</span><ArrowUpIcon className="lh-mobile-submit-icon" />
 					</Button>
 				</div>
 			</div>
