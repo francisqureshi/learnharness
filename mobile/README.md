@@ -1,0 +1,132 @@
+# LearnHarness iPhone preview
+
+A Capacitor iOS wrapper for a private LearnHarness web server. Next.js, agents,
+credentials, and learning data stay on the server. The phone loads the existing
+web interface over HTTPS. This is a personal-device prototype: Capacitor's remote
+server URL is a development facility, not a finished App Store deployment.
+
+## Prepare the project
+
+Use Node 22+ and, for building, a Mac with Xcode 26+ installed and opened once.
+From this directory:
+
+```sh
+npm ci
+LH_SERVER_URL=https://your-server.example npm run configure
+npm run ios:add  # first time only; skip if ios/ already exists
+npm run ios:sync
+npm run ios:open
+```
+
+The generated configuration stays untracked so a private server address does not
+become a shared default. Reconfigure and sync whenever the server address changes.
+Use an HTTPS origin with a valid certificate. Do not expose LearnHarness directly
+to the public internet: its web mode shares data and credentials without a login.
+Tailscale Serve can proxy a loopback-only Next server privately; the iPhone must
+also have Tailscale connected to the same tailnet with access to the server port.
+
+## Install on your iPhone
+
+1. In Xcode Settings → Accounts, sign in with your Apple Account.
+2. Select the App target → Signing & Capabilities, enable automatic signing, and
+   select your Personal Team. Change the bundle identifier if Xcode needs a unique one.
+3. Connect and unlock the iPhone, accept its trust prompts, and enable Developer
+   Mode if requested by Xcode.
+4. Select the iPhone as the run destination and press Run.
+
+Free Personal Team provisioning expires after seven days; rebuild and reinstall
+from Xcode to renew it. No paid membership is needed for this personal test.
+
+## Preview limits
+
+- Requires the server and a network connection; no offline lessons.
+- Phone navigation uses a drawer that starts closed; the web UI owns safe-area
+  padding and inputs wait for an explicit tap. UIKit content insets are disabled
+  to avoid applying the safe area twice. Mac layout behavior is unchanged.
+- Test microphone permission, dictation, keyboard layout, external sign-in,
+  file uploads, and reconnection after locking the phone on a real device.
+- The native Keyboard plugin resizes the webview above the iOS keyboard and
+  removes the form accessory bar. External destinations are not broadly allowlisted.
+- Provider credentials must be configured on the server before starting lessons.
+- The static connection-error page is bundled locally and offers recovery steps.
+
+The upstream desktop installation has separate storage. This preview does not
+copy or modify that installation's learning records or credentials.
+
+## Repeatable layout check
+
+From the repository root, run `node scripts/smoke-phone-layout.mjs URL` against
+an isolated built server. Set `CHROME_PATH` if Chromium is elsewhere. The check
+covers drawer overlay/dismissal, navigation, input focus, reload, landscape, and
+unchanged desktop/Electron layouts without submitting chats or calling a model.
+Actual keyboard, dictation, and device reconnect still require iPhone acceptance.
+
+For command-line device builds, use the connected phone's UDID as the Xcode
+destination with `-allowProvisioningUpdates -allowProvisioningDeviceRegistration`,
+rather than a generic iOS destination. This lets automatic signing include the
+phone in the Personal Team profile. Keep team identifiers and generated signing
+profiles out of the repository. If signing fails in SSH with `errSecInternalComponent`,
+run the build in the signed-in Mac user's local Terminal so Keychain can prompt.
+After installation, iOS may also require trusting your Apple ID under Settings →
+General → VPN & Device Management before the first launch.
+
+## iOS keyboard regression
+
+Boot the chosen simulator explicitly and install the preview using its UUID
+(`simctl boot UUID`, `simctl bootstatus UUID -b`, `simctl install UUID App.app`).
+Avoid the ambiguous `booted` alias when several simulators are open. Select Simulator → I/O → Keyboard →
+Connect Hardware Keyboard **off**, so this tests the full software keyboard.
+With XcodeGen installed, run from `mobile/tests`:
+
+```sh
+xcodegen generate
+xcodebuild -project LearnHarnessKeyboard.xcodeproj -scheme KeyboardTests \
+  -destination 'platform=iOS Simulator,id=YOUR_SIMULATOR_ID' \
+  -parallel-testing-enabled NO -derivedDataPath /tmp/learnharness-keyboard-tests test
+```
+
+The test opens the installed preview, focuses its composer without submitting a
+lesson, verifies the header retains its screen position, checks the software
+keyboard is visible and the send control remains above it, and saves a screenshot
+in the Xcode test result. Run against isolated server data for repeatable UI checks.
+The browser smoke test cannot validate UIKit keyboard panning.
+
+Mobile Settings opens a full-screen category list. Sections use grouped rows,
+44px control hit areas, and back navigation; provider deep links still open their
+requested section directly. The Mac settings sidebar and persistence APIs remain
+shared. `node scripts/smoke-mobile-settings.mjs ISOLATED_URL` checks all categories,
+widths, switch geometry and save/reopen/restore behavior. Use isolated data because
+that check temporarily changes a graph setting. The iOS test suite also checks
+Settings navigation and editing with the software keyboard open.
+
+## Resume and reconnect
+
+A fresh phone launch at `/` opens the last lesson viewed on any client. The
+server stores only its ID in `data/last-lesson.json`; viewing does not reorder
+lessons or change model settings. Explicit New Session and Graph destinations
+remain available, and a deleted last lesson falls back to New Session. Desktop
+launch stays on its existing home screen.
+
+Draft composer text, question choices/reasoning, practice text, and reading
+anchors stay in origin-scoped device storage. They do not sync between devices.
+A question draft is restored only for the currently pending call; reconnecting
+never submits that draft. Clearing the app/browser's storage removes these local
+copies. This is not offline lesson support: loading lessons still requires hws.
+
+The notification stream immediately flushes a connection frame. Foreground and
+online events replace its connection and resync server records; an already
+streaming turn reattaches its GET reader without replaying the input POST.
+
+`node scripts/smoke-resume.mjs LOOPBACK_URL ISOLATED_DATA_DIRECTORY` checks
+relaunch, local draft/position recovery, separate-device resume, missed updates,
+foreground recovery, and deletion fallback without calling a provider. It writes
+only to isolated fixtures and restores them afterward. The optional XCUITest
+`testResumeDraftAfterRelaunch` requires that fixture's pending quiz as the shared
+last lesson; it verifies an actual WKWebView relaunch and background/foreground.
+Physical iPhone lock/unlock and Wi-Fi/cellular handoff remain device acceptance.
+
+On iOS/iPadOS, Return inserts a newline in multiline text fields and never invokes
+lesson submit shortcuts. Use the explicit Send/Submit answer button. Mac keyboard
+shortcuts are unchanged. `scripts/smoke-ios-return.mjs LOOPBACK_URL` verifies both
+newline editing and the explicit Send button (submission requests are intercepted).
+`testReturnInsertsNewline` exercises the actual iOS keyboard in an isolated preview.

@@ -1,0 +1,120 @@
+// Isolated-data acceptance: NEVER point this at production.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import puppeteer from 'puppeteer-core';
+const origin = process.argv[2];
+const data = process.argv[3];
+if (!origin || !data || !new URL(origin).hostname.match(/^(127\.0\.0\.1|localhost)$/)) throw Error('Supply an isolated loopback URL and its data directory');
+const chatId = 'chat_mw86x2nc_d45fd445';
+const file = path.join(data, 'chats', `${chatId}.json`);
+const original = fs.readFileSync(file, 'utf8');
+const composerId='chat_resume_composer';
+const composerFile=path.join(data,'chats',`${composerId}.json`);
+if(fs.existsSync(composerFile)) throw Error('Temporary composer fixture already exists');
+const browser = await puppeteer.launch({executablePath: process.env.CHROME_PATH ?? '/run/current-system/sw/bin/chromium',headless:true});
+const pause = ms => new Promise(r => setTimeout(r, ms));
+async function until(page, fn, arg) {
+  for (let i=0;i<300;i++) { if (await page.evaluate(fn,arg)) return; await pause(100); }
+  throw Error(`Condition timed out: ${fn}`);
+}
+try {
+  const page = await browser.newPage();
+  await page.setViewport({width:402,height:874,isMobile:true,hasTouch:true});
+  const errors=[];
+  page.on('pageerror', e=>{errors.push(e.message);console.error(e.message);});
+  let sends=0;
+  page.on('request',r=>{if(new URL(r.url()).pathname==='/api/chat' && r.method()==='POST') sends++;});
+  await page.goto(`${origin}/chat/${chatId}`);
+  await page.waitForSelector('[data-testid="thinking-field"] [contenteditable="true"]');
+  await page.click('[data-testid="thinking-field"] [contenteditable="true"]');
+  await page.keyboard.type('Device-local unsent reasoning');
+  await pause(300);
+  await page.reload();
+  await until(page, ()=>document.querySelector('[data-testid="thinking-field"] [contenteditable="true"]')?.textContent==='Device-local unsent reasoning');
+  console.log('PASS: unfinished answer survives reload');
+  await pause(900);
+  const scrollTop = await page.evaluate(() => {
+    const main=[...document.querySelectorAll('[role="log"] *')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight>e.clientHeight);
+    if (!main) throw Error('No transcript scroller');
+    main.dispatchEvent(new WheelEvent('wheel',{deltaY:-400}));
+    main.scrollTop=120;
+    main.dispatchEvent(new Event('scroll'));
+    return main.scrollTop;
+  });
+  assert.ok(scrollTop>0);
+  await page.reload();
+  await page.waitForSelector('[data-testid="question-dock"]');
+  await pause(900);
+  const restoredTop=await page.evaluate(() => [...document.querySelectorAll('[role="log"] *')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight>e.clientHeight)?.scrollTop);
+  assert.ok(Math.abs(restoredTop-scrollTop)<40, `Reading position ${restoredTop} differs from ${scrollTop}`);
+  console.log('PASS: reading position survives reload');
+
+  const second = await browser.createBrowserContext();
+  const phone = await second.newPage();
+  await phone.setViewport({width:402,height:874,isMobile:true,hasTouch:true});
+  await phone.goto(origin);
+  await until(phone, id=>location.pathname===`/chat/${id}`,chatId);
+  await phone.waitForSelector('[data-testid="thinking-field"] [contenteditable="true"]');
+  assert.equal(await phone.$eval('[data-testid="thinking-field"] [contenteditable="true"]',el=>el.textContent),'');
+  console.log('PASS: shared last lesson resumes on a separate device; drafts remain local');
+  await phone.goto(`${origin}/chat/new`);
+  await phone.waitForSelector('[data-testid="phone-header"]');
+  assert.equal(new URL(phone.url()).pathname,'/chat/new');
+  await phone.goto(`${origin}/?view=graph`);
+  await phone.waitForSelector('html.lh-phone');
+  assert.equal(new URL(phone.url()).search,'?view=graph');
+  console.log('PASS: explicit new lesson and graph navigation bypass resume');
+  await page.bringToFront();
+  await page.setOfflineMode(true);
+  const record=JSON.parse(original);
+  record.messages.unshift({id:'msg_resume_missed',role:'user',content:'Reconnect test: saved while disconnected.',timestamp:Date.now()});
+  fs.writeFileSync(file,JSON.stringify(record));
+  await pause(500);
+  await page.setOfflineMode(false);
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await until(page, ()=>document.body.textContent.includes('Reconnect test: saved while disconnected.'));
+  assert.equal(await page.$eval('[data-testid="thinking-field"] [contenteditable="true"]',el=>el.textContent),'Device-local unsent reasoning');
+  assert.equal(sends,0,'Reconnecting must not submit or replay an answer');
+  console.log('PASS: network reconnect catches missed records without losing drafts or sending answers');
+  // A visibility wake replaces an apparently live but silent EventSource too.
+  const backgroundTab = await browser.newPage();
+  await backgroundTab.bringToFront();
+  await until(page, ()=>document.hidden);
+  await pause(300);
+  record.messages[0].content='Foreground test: saved while backgrounded.';
+  fs.writeFileSync(file,JSON.stringify(record));
+  await page.bringToFront();
+  await until(page, ()=>document.body.textContent.includes('Foreground test: saved while backgrounded.'));
+  assert.equal(sends,0);
+  console.log('PASS: foreground refresh catches missed records');
+  const desktop=await second.newPage();
+  await desktop.setViewport({width:1440,height:1000});
+  await desktop.goto(origin);await pause(800);
+  assert.equal(new URL(desktop.url()).pathname,'/');
+  console.log('PASS: desktop launch stays unchanged');
+  fs.writeFileSync(composerFile,JSON.stringify({id:composerId,version:1,title:'Resume composer test',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[]}));
+  await page.goto(`${origin}/chat/${composerId}`);
+  await page.waitForSelector('[data-testid="composer"] [contenteditable="true"]');
+  await page.click('[data-testid="composer"] [contenteditable="true"]');
+  await page.keyboard.type('Unsent composer text');
+  await page.reload();
+  await until(page,()=>document.querySelector('[data-testid="composer"] [contenteditable="true"]')?.textContent==='Unsent composer text');
+  console.log('PASS: unsent composer survives reload');
+  fs.unlinkSync(composerFile);
+  const clean = await browser.createBrowserContext();
+  const deleted = await clean.newPage();
+  await deleted.setViewport({width:402,height:874,isMobile:true,hasTouch:true});
+  await deleted.goto(origin);
+  await until(deleted,()=>document.documentElement.dataset.lhResumeChecked==='true');
+  assert.equal(new URL(deleted.url()).pathname,'/');
+  await deleted.waitForSelector('[data-testid="composer"]');
+  console.log('PASS: deleted last lesson falls back to New Session');
+
+  assert.deepEqual(errors,[]);
+} finally {
+  fs.writeFileSync(file,original);
+  fs.rmSync(composerFile,{force:true});
+  fs.writeFileSync(path.join(data,'last-lesson.json'),JSON.stringify({chatId}));
+  await browser.close();
+}

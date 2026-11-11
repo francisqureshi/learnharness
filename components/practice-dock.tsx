@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUpIcon, ChevronRightIcon } from "lucide-react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import { joinDictation, useDictationTarget } from "@/components/dictation";
+import { useIOSKeyboard } from "./keyboard-platform";
 import { useEnterSubmits } from "@/components/enter-submits";
+import { PhoneDictationSlot } from "@/components/phone-chrome";
+import { PathInput } from "@/components/path-input";
+import { readLessonLocal, writeLessonLocal } from "./lesson-local";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,20 +53,26 @@ export interface PracticeDockProps {
 }
 
 export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmit, onEscape, compactionRunning = false }: PracticeDockProps) {
+	const iosKeyboard = useIOSKeyboard();
 	const [thinking, setThinking] = useState("");
 	// Ref MIRRORS the field ("nothing gets lost", the question-dock
 	// discipline): a submit resuming after `await finishDictation()` reads
 	// the tail, never a stale closure.
 	const thinkingRef = useRef("");
+	useEffect(() => {
+		const saved = readLessonLocal<string>(problemCallId, "practice");
+		if (typeof saved === "string") { thinkingRef.current = saved; setThinking(saved); }
+	}, [problemCallId]);
 
 	useDictationTarget(
 		useCallback(
 			(t: string) => {
 				const v = joinDictation(thinkingRef.current, t);
 				thinkingRef.current = v;
+				writeLessonLocal(problemCallId, "practice", v);
 				setThinking(v);
 			},
-			[],
+			[problemCallId],
 		),
 		true,
 	);
@@ -72,6 +82,7 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 		const text = thinkingRef.current.trim();
 		if (text.length === 0) return;
 		thinkingRef.current = "";
+		writeLessonLocal(problemCallId, "practice", "");
 		setThinking("");
 		onSubmit(text);
 	};
@@ -121,11 +132,12 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 				<div className="px-2.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
 					YOUR THINKING
 				</div>
-				<textarea
+				<PathInput
 					value={thinking}
-					onChange={(e) => {
-						thinkingRef.current = e.target.value;
-						setThinking(e.target.value);
+					onValueChange={(value) => {
+						thinkingRef.current = value;
+						writeLessonLocal(problemCallId, "practice", value);
+						setThinking(value);
 					}}
 					onKeyDown={(e) => {
 						// Esc ends dictation — stopPropagation claims it (the
@@ -144,7 +156,6 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 						}
 					}}
 					placeholder="Work here, think out loud."
-					rows={4}
 					className={cn(
 						"field-sizing-content lh-input max-h-64 min-h-16 w-full resize-none bg-transparent px-2.5 pb-2 outline-none placeholder:text-muted-foreground",
 					)}
@@ -154,17 +165,18 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 				    one p-1 row. Corner radii concentric: shell 16 − m-1.5 (6) =
 				    field 10 − p-1 (4) = button 6. */}
 				<div className="flex items-center justify-between gap-2 p-1">
-					<span aria-hidden className="pl-1.5 text-xs text-muted-foreground">
-						{compactionRunning ? "compacting session…" : "↵ submits · ⇧↵ newline"}
+					<PhoneDictationSlot />
+					<span aria-hidden className="lh-answer-key-hint pl-1.5 text-xs text-muted-foreground">
+						{compactionRunning ? "compacting session…" : iosKeyboard ? "↵ newline" : "↵ submits · ⇧↵ newline"}
 					</span>
 					<Button
 						type="button"
-						data-testid="practice-send"
+						data-testid="practice-send" aria-label="Submit thinking"
 						disabled={thinking.trim().length === 0 || compactionRunning}
 						onClick={() => submit()}
 						className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
 					>
-						Submit thinking
+						<span className="lh-desktop-submit-label">Submit thinking</span><ArrowUpIcon className="lh-mobile-submit-icon" />
 					</Button>
 				</div>
 			</div>

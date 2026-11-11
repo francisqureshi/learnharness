@@ -6,6 +6,8 @@ const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayout
 
 export interface DockHeightMeasurements {
 	columnHeight: number;
+	/** Phone answers sit just below the header. Desktop retains its existing gap. */
+	edgeGap?: number;
 	/** Stats/toolbar and block padding, outside the scrolling viewport. */
 	outsideHeight: number;
 	/** Everything in the viewport except the animated shell. */
@@ -19,7 +21,7 @@ export interface DockHeightMeasurements {
 }
 
 export function dockHeightBudget(m: DockHeightMeasurements) {
-	const available = Math.max(m.columnHeight - 32, 0);
+	const available = Math.max(m.columnHeight - (m.edgeGap ?? 32), 0);
 	const viewportMaxHeight = Math.max(available - m.outsideHeight, 0);
 	const shellMaxHeight = Math.max(viewportMaxHeight - m.beforeShellHeight, 0);
 	const naturalHeight = m.beforeShellHeight + m.shellBorderHeight + m.contentHeight;
@@ -60,6 +62,7 @@ export function syncDockHeight(elements: DockHeightElements, expanded: boolean) 
 	const questionStyle = question ? getComputedStyle(question) : null;
 	const budget = dockHeightBudget({
 		columnHeight: column.clientHeight,
+		edgeGap: document.documentElement.classList.contains("lh-phone") && block.dataset.phoneAnswer === "expanded" ? 44 : 32,
 		outsideHeight: Math.max(height(block) - height(viewport), 0),
 		beforeShellHeight: Math.max(height(body) - height(shell), 0),
 		shellBorderHeight: pixels(shellStyle.borderTopWidth) + pixels(shellStyle.borderBottomWidth),

@@ -1,5 +1,9 @@
 "use client";
 
+import { PhoneHeader } from "@/components/phone-chrome";
+import { isIOSKeyboard, useIOSKeyboard } from "./keyboard-platform";
+import { isPhoneLayout } from "@/components/phone-layout";
+
 import { createContext, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatSession } from "@/components/session";
 import { visibleQueuedSteers } from "@/components/session-core";
@@ -14,19 +18,22 @@ import {
 	ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { PathText } from "@/components/file-path-chip";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { BrailleSpinner } from "@/components/braille-spinner";
 import { LiveToolCard } from "@/components/artifacts/live-tool-card";
 import { Separator } from "@/components/ui/separator";
 import { AnsweredCard } from "@/components/answered-card";
+import { MalformedQuestion } from "@/components/malformed-question";
 import { artifactRenderers } from "@/components/artifacts";
 import { SubagentSteerCard } from "@/components/artifacts/steer-card";
-import { Composer } from "@/components/composer";
+import { ChatSessionComposer } from "@/components/composer";
 import { useEnterSubmits } from "@/components/enter-submits";
 import { blurAfterPointerClick } from "@/components/focus-hygiene";
 import { dockStateKey } from "@/components/dock-state-key";
 import { clearOpeningPrompt, readOpeningPromptEntry, stashOpeningPrompt, OPENING_PROMPT_FAILURE } from "@/components/opening-prompt";
+import { usePhoneLayout } from "@/components/phone-layout";
 import { forwardDockWheel, useDockHeight } from "@/components/dock-height";
 import { QueuedSteersBody, type QueuedSteerLine } from "@/components/queued-steers";
 import { DictationBar, finishDictation, joinDictation, useDictation } from "@/components/dictation";
@@ -37,6 +44,7 @@ import { useServerEvent, useServerResync } from "@/components/server-events";
 import {
 	isProviderKeyRefusal,
 	firstSourceTextParts,
+	cliContextWindowOf,
 	messageAnchorId,
 	textPartMessageId,
 	kbdEventForAction as kbdEventForChat,
@@ -53,6 +61,8 @@ import { ArrowRightIcon, DumbbellIcon, WaypointsIcon } from "lucide-react";
 import type { PlanBlockData } from "@/src/core";
 import { QuestionDock } from "@/components/question-dock";
 import { SessionFind } from "@/components/session-find";
+import { readLessonLocal, writeLessonLocal } from "./lesson-local";
+import { LessonReadingPosition } from "./lesson-reading-position";
 import { SessionMessageNavigation } from "@/components/session-navigation";
 import { PracticeDock } from "@/components/practice-dock";
 import { ThinkingCard, type PracticeThinkingData } from "@/components/practice-cards";
@@ -70,6 +80,8 @@ import { CoverageRing } from "@/components/extraction-coverage";
 import { Button } from "@/components/ui/button";
 import {
 	activeProblemOf,
+	pendingQuestionOf,
+	malformedQuestionsOf,
 	dismissedAnswer,
 	endsInFailedTurn,
 	findPendingToolCall,
@@ -252,10 +264,15 @@ export function Chat({
 	// (core/view.ts projectView); sends are ONE explicit input event each
 	// ({chatId, input} — the stash indirection died with the SDK), and the
 	// turn stream is the VERBATIM AgentEvent passthrough the server emits.
-	const { messages, nativeMessages, hasConfirmedConversation, contextTokens, send, continueIfOwed, steer, steerQueue, submitAnswer, dismissQuestion, dismissProblem, questionDraft, saveQuestionDraft, setMessages, adoptRecord, status, error, stop, clearError, resumeStream, setReattachSettled } =
+	const iosKeyboard = useIOSKeyboard();
+	const { draftsLoaded, messages, nativeMessages, hasConfirmedConversation, contextTokens, send, continueIfOwed, steer, steerQueue, submitAnswer, dismissQuestion, dismissProblem, questionDraft, saveQuestionDraft, setMessages, adoptRecord, status, error, stop, clearError, resumeStream, setReattachSettled } =
 		useChatSession({ chatId, initialMessages, initialError, initiallyInFlight });
 
 	const sessionFindScopeRef = useRef<HTMLDivElement | null>(null);
+	useEffect(() => {
+		document.documentElement.dataset.lhResumeChecked = "true";
+		void fetch("/api/resume", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chatId }) }).catch(() => {});
+	}, [chatId]);
 	const scrollContextRef = useRef<StickToBottomContext | null>(null);
 	const sourceTextParts = useMemo(() => firstSourceTextParts(messages), [messages]);
 
@@ -413,6 +430,7 @@ export function Chat({
 				void dismissQuestion(
 					p.toolCallId,
 					reading ? { ...answer, readingThinking: reading } : answer,
+					p.key,
 				);
 				if (busyRef.current) abortInFlightTurn();
 				return;
@@ -444,7 +462,8 @@ export function Chat({
 		// mount-only by design (turnInFlight read at initial value)
 	}, []);
 
-	const pending = findPendingToolCall(messages);
+	const pending = findPendingToolCall(messages, pendingQuestionOf(nativeMessages));
+	const malformedQuestions = malformedQuestionsOf(nativeMessages);
 	// The abort handler reads the pending question from a ref (the window
 	// listener is mount-scoped; the value it needs is render-scoped).
 	const pendingRef = useRef(pending);
@@ -514,7 +533,7 @@ export function Chat({
 	 * thinking while reading the teaching prose, mounted while a check waits
 	 * behind its reveal, riding the check answer (or its dismissal) as the
 	 * separate `readingThinking` field. Reset per pending question. */
-	const [readingThinking, setReadingThinking] = useState("");
+	const [readingThinkingSeed, setReadingThinkingSeed] = useState({ questionId: null as string | null, value: "", revision: 0 });
 	const readingThinkingRef = useRef("");
 
 	// ⌘T (toggle-user-thinking, owner round 2026-10-07): set EVERY user
@@ -527,36 +546,48 @@ export function Chat({
 	}, []);
 	const applyReadingThinking = useCallback((v: string) => {
 		readingThinkingRef.current = v;
-		setReadingThinking(v);
-	}, []);
+		if (pending?.key) saveQuestionDraft(pending.key, { readingThinking: v });
+	}, [pending?.key, saveQuestionDraft]);
 	const clearReadingThinking = useCallback(() => {
 		readingThinkingRef.current = "";
-		setReadingThinking("");
+		setReadingThinkingSeed((previous) => ({ ...previous, value: "", revision: previous.revision + 1 }));
 	}, []);
-	const pendingQuestionId = pending?.toolCallId ?? null;
-	useEffect(() => {
+	const pendingQuestionId = pending?.key ?? null;
+	useLayoutEffect(() => {
 		// Different calls never share a draft; a failed submission of THIS
 		// call restores the reading channel alongside the form's snapshot.
-		const reading = pendingQuestionId ? questionDraft(pendingQuestionId)?.readingThinking ?? "" : "";
-		readingThinkingRef.current = reading;
-		setReadingThinking(reading);
-	}, [pendingQuestionId, questionDraft]);
+		const value = pendingQuestionId ? questionDraft(pendingQuestionId)?.readingThinking ?? "" : "";
+		readingThinkingRef.current = value;
+		setReadingThinkingSeed((previous) =>
+			previous.questionId === pendingQuestionId && previous.value === value
+				? previous
+				: { questionId: pendingQuestionId, value, revision: previous.revision + 1 },
+		);
+	}, [pendingQuestionId, questionDraft, draftsLoaded]);
 
 	// The phase at every message (one linear fold): the transcript draws a
 	// color-coded dotted divider at each boundary; the header chip reads the
 	// session's current phase.
 	const phases = useMemo(() => phaseTimeline(messages), [messages]);
 
-	const [text, setText] = useState("");
-	/* The composer's value MIRROR ("nothing gets lost" round, owner
-	 * 2026-10-01): a dictation flush lands via setState, which a closure
-	 * waiting through `await finish()` cannot observe in time. Kept
-	 * current at every write site via applyText. */
+	const [composerDraftRevision, setComposerDraftRevision] = useState(0);
+	/* The composer draft ref is synchronous, so sends and dictation flushes
+	 * read the latest text without a parent render per input event. Explicit
+	 * resets still bump a revision so the local field can sync. */
 	const textRef = useRef("");
 	const applyText = useCallback((v: string) => {
 		textRef.current = v;
-		setText(v);
-	}, []);
+		writeLessonLocal(chatId, "composer", v);
+		setComposerDraftRevision((revision) => revision + 1);
+	}, [chatId]);
+	const recordComposerText = useCallback((v: string) => {
+		textRef.current = v;
+		writeLessonLocal(chatId, "composer", v);
+	}, [chatId]);
+	useEffect(() => {
+		const saved = readLessonLocal<string>(chatId, "composer");
+		if (typeof saved === "string" && !textRef.current) applyText(saved);
+	}, [chatId, applyText]);
 	// Saved slot completeness is live, but the session's selected route
 	// comes from its own ordinary model control, never today's Strong pin.
 	const { catalog, configured, zeroKeys } = useModelSetup(initialConfigured);
@@ -687,10 +718,10 @@ export function Chat({
 	const cycleChatFields = useCallback((): readonly HTMLElement[] => {
 		const pick = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel));
 		return [
-			...pick('[data-testid="reading-thinking-field"] textarea'),
-			...pick('[data-testid="question-dock"] textarea'),
-			...pick('[data-testid="practice-dock"] textarea'),
-			...pick('[data-testid="composer"] textarea'),
+			...pick('[data-testid="reading-thinking-field"] [data-file-path-input]'),
+			...pick('[data-testid="question-dock"] [data-file-path-input]'),
+			...pick('[data-testid="practice-dock"] [data-file-path-input]'),
+			...pick('[data-testid="composer"] [data-file-path-input]'),
 		];
 	}, []);
 	useFieldCycle(cycleChatFields);
@@ -705,13 +736,13 @@ export function Chat({
 	 * composer: with a question pending the Composer is unmounted, the ref
 	 * is null, and the thinking field is left alone by design. */
 	const dictationWasActiveRef = useRef(false);
-	const composerInputRef = useRef<HTMLTextAreaElement>(null);
+	const composerInputRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (dictation.active) {
 			dictationWasActiveRef.current = true;
 		} else if (dictationWasActiveRef.current) {
 			dictationWasActiveRef.current = false;
-			composerInputRef.current?.focus();
+			if (!isPhoneLayout()) composerInputRef.current?.focus();
 		}
 	}, [dictation.active]);
 
@@ -740,8 +771,7 @@ export function Chat({
 	// recovers from it. Later compaction requires new input instead.
 	const retryable = (status === "ready" || status === "error") && !busy && !compacting && endsInFailedTurn(nativeMessages);
 	const retryFailedTurn = () => retryFailedResponse(send, draftRef);
-	const canSend =
-		(text.trim().length > 0 || dictation.active) && !pending && !activeProblem && !compacting;
+	const sendAllowed = !pending && !activeProblem && !compacting;
 
 	/* THE PRACTICE PAUSE (owner round 16): between problems — practice
 	 * kind, nothing active, nothing in flight, and at least one problem
@@ -1028,6 +1058,8 @@ export function Chat({
 	// (duplicate message ids). So: a settle during a busy turn defers the
 	// sync; the next idle fetch adopts the finished record.
 	const [jobs, setJobs] = useState<JobRecord[]>([]);
+	const statusRef = useRef(status);
+	statusRef.current = status;
 	const localStreamRef = useRef(false);
 	localStreamRef.current = localStream;
 	const jobStatusRef = useRef<Map<string, string>>(new Map());
@@ -1044,12 +1076,23 @@ export function Chat({
 	// the ref the timer fires through (a stale closure must never fetch an
 	// old chatId).
 	const fetchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	const fetchJobsRef = useRef<() => void>(() => {});
-	const fetchJobs = useCallback(async () => {
+	const fetchJobsRef = useRef<(reconnect?: boolean) => void>(() => {});
+	const fetchJobs = useCallback(async (reconnect = false) => {
+		// A disconnected view can miss an entire turn with no job transition.
+		// Keep the catch-up pending if this first read also fails.
+		if (reconnect) pendingSyncRef.current = true;
+		// A suspended GET stream may still look busy locally. Reattach its
+		// reader, never its input POST. "submitted" is deliberately excluded:
+		// the server may not have acknowledged that input yet.
+		if (reconnect && statusRef.current === "streaming") {
+			attachToRunningTurn();
+			return;
+		}
 		try {
 			const res = await fetch(`/api/jobs?chatId=${encodeURIComponent(chatId)}`);
 			if (!res.ok) return;
 			const data = (await res.json()) as { jobs?: JobRecord[]; turnInFlight?: boolean };
+			if (reconnect && data.turnInFlight === true && !localStreamRef.current && !turnInFlightRef.current) attachToRunningTurn();
 			const list = data.jobs ?? [];
 			for (const j of list) {
 				const prev = jobStatusRef.current.get(j.id);
@@ -1081,15 +1124,13 @@ export function Chat({
 				void syncFromServer();
 			}
 			setJobs(list);
-			// (Wake-turn adoption that lived here — the turnInFlight attach
-			// line — died at S3: turn-started on the events channel owns
-			// discovery now. turnInFlight is STILL READ above: the settle
-			// logic's idle check needs it.)
+			// Live events own ordinary discovery; reconnect also discovers
+			// turns whose start event was missed while this view was away.
 		} catch {
 			/* transient fetch failure — the next jobs-changed announcement re-fetches */
 		}
-	}, [chatId, syncFromServer, adoptAppendOnly]);
-	fetchJobsRef.current = () => void fetchJobs();
+	}, [chatId, syncFromServer, adoptAppendOnly, attachToRunningTurn]);
+	fetchJobsRef.current = (reconnect) => void fetchJobs(reconnect);
 	// Mount + chat switch: the IMMEDIATE (non-debounced) initial read. The
 	// firstFetch guard resets with the old rule — true only when this
 	// session has never seen a job (a chat switch keeps the map: job ids
@@ -1107,7 +1148,7 @@ export function Chat({
 		}, 250);
 	});
 	// Reconnect catch-up: events missed while the channel was down.
-	useServerResync(() => fetchJobsRef.current());
+	useServerResync(() => fetchJobsRef.current(true));
 	useEffect(
 		() => () => {
 			if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
@@ -1122,8 +1163,6 @@ export function Chat({
 	// 1500ms fallback record poll: discovery is no longer a polling window
 	// that can expire. Handlers read REFS, not closure state — events fire
 	// between renders, and a ref holds the live value at event time.
-	const statusRef = useRef(status);
-	statusRef.current = status;
 	/** Fix B (2026-10-02): turn-settled arrived for OUR OWN turn — the
 	 * record is durable (endTurn fires only after persistTurn); the ready
 	 * flip consumes this flag to canonize the view onto the record. See the
@@ -1278,7 +1317,9 @@ export function Chat({
 				    60px is an ALIGNMENT, not just a size: it equals the sidebar's
 				    LH wordmark band, so the header's border-b continues that
 				    band's bottom edge as one line across the app (owner, round 6). */}
+				<PhoneHeader title={titleText}>{planTree && <button type="button" className="py-3 text-left" onClick={() => setPlanOpen(true)}>Lesson plan</button>}</PhoneHeader>
 				<TopBar
+					className="lh-desktop-header"
 					// While renaming the bar is NOT a drag surface: app-region:drag
 					// would eat the mousedown, so click-to-escape (below) could
 					// never fire. Rename mode is interactive mode (owner ask) —
@@ -1390,6 +1431,7 @@ export function Chat({
 				<div ref={sessionFindScopeRef} className="relative flex min-h-0 flex-1">
 				<Conversation className="h-full min-w-0 flex-1" initial="instant" contextRef={scrollContextRef}>
 					<SessionMessageNavigation />
+					<LessonReadingPosition chatId={chatId} />
 					<ConversationContent className="min-h-full gap-0 p-0">
 						<div data-session-find-root="" className={`${COLUMN} flex flex-1 flex-col gap-4 pt-4`}>
 							{messages.length === 0 && !busy && (
@@ -1507,7 +1549,7 @@ export function Chat({
 												    rail as the thinking rows — one quote geometry. */}
 												<div className="font-medium uppercase tracking-wide text-muted-foreground">You</div>
 												<div className="lh-prose whitespace-pre-wrap text-foreground">
-													{m.parts.filter((p) => p.type === "text").map((p) => p.text).join("\n")}
+													<PathText text={m.parts.filter((p) => p.type === "text").map((p) => p.text).join("\n")} />
 												</div>
 											</div>
 									) : (
@@ -1578,6 +1620,13 @@ export function Chat({
 													case "tool-ask_user_question":
 													case "tool-explain":
 													case "tool-recall": {
+														const malformed = !busy && malformedQuestions.find(call => call.messageId === part.sourceMessageId && call.contentIndex === part.sourceContentIndex && call.toolCallId === part.toolCallId);
+														if (malformed) return <MalformedQuestion key={pi} disabled={!!pending || compacting}
+															reason={pending ? "Answer or discard the remaining question first." : undefined}
+															onRetry={() => {
+																draftRef.current = null;
+																void send({ type: "retry-question", messageId: malformed.messageId, contentIndex: malformed.contentIndex, toolCallId: malformed.toolCallId });
+															}} />;
 														// Pending/streaming questions live in the dock, not the
 														// transcript; answered ones render as graded records.
 														if (part.state === "output-available") {
@@ -1673,10 +1722,10 @@ export function Chat({
 				    anchored to the dock block's top edge, so it rides every
 				    height morph (typing, a question growing the band, the
 				    fold) and NEVER overlaps the composer. */}
-				<DockOverlay
+				{draftsLoaded && <DockOverlay
 					pending={pending}
-					initialQuestionDraft={pending ? questionDraft(pending.toolCallId)?.form : undefined}
-					onSaveQuestionDraft={(form) => { if (pending) saveQuestionDraft(pending.toolCallId, { form }); }}
+					initialQuestionDraft={pending ? questionDraft(pending.key)?.form : undefined}
+					onSaveQuestionDraft={(form) => { if (pending) saveQuestionDraft(pending.key, { form }); }}
 					practice={activeProblem}
 					compactionRunning={compacting}
 					onSubmitThinking={submitThinking}
@@ -1685,11 +1734,13 @@ export function Chat({
 					plan={hasPlan ? <PlanMarginalia messages={messages} /> : undefined}
 					onOpenPlan={() => setPlanOpen(true)}
 					requiresReveal={requiresReveal}
-					readingThinking={readingThinking}
+					readingThinking={readingThinkingSeed.value}
+					readingThinkingRevision={readingThinkingSeed.revision}
 					onReadingThinking={applyReadingThinking}
 					phase={phases.at(-1) ?? "probe"}
 					turns={turns}
 					contextTokens={contextTokens}
+					cliContextWindow={cliContextWindowOf(nativeMessages)}
 					pricing={pricing}
 					onReserve={setDockReserve}
 					dictationSlot={<DictationBar dictation={dictation} />}
@@ -1714,25 +1765,27 @@ export function Chat({
 						)
 					}
 					composer={
-						<Composer
+						<ChatSessionComposer
 							// Stop aborts ANY in-flight turn (stream-reattach wave): the
 							// square renders while a reattached/wake turn runs too — the
 							// abort channel kills it server-side; stop() alone would
 							// only detach our view.
 							busy={busy}
-							value={text}
-							onChange={applyText}
+							value={textRef.current}
+							revision={composerDraftRevision}
+							onChange={recordComposerText}
 							inputRef={composerInputRef}
 							onSend={onSend}
 							onStop={abortInFlightTurn}
-							canSend={canSend}
+							sendAllowed={sendAllowed}
+							dictationActive={dictation.active}
 							onEscape={dictation.active ? dictation.cancel : undefined}
 							// The pause affordance (owner round 16): the placeholder
 							// IS the hint — empty state, exactly where Enter-on-empty
 							// applies.
 							nextProblem={nextReady}
 							onNext={sendNext}
-							placeholder={nextReady ? "Ask anything, or press Enter for the next one." : undefined}
+							placeholder={nextReady ? (iosKeyboard ? "Ask anything, or tap Next for the next one." : "Ask anything, or press Enter for the next one.") : undefined}
 						/>
 					}
 					onSubmitAnswer={(output) => {
@@ -1745,13 +1798,13 @@ export function Chat({
 						// ride the same callback (QuestionAnswerData.dismissed). The
 						// reading-thinking draft rides along (owner 2026-10-03) — the
 						// check answer is its only carrier.
-						saveQuestionDraft(pending.toolCallId, { readingThinking: readingThinkingRef.current });
+						saveQuestionDraft(pending.key, { readingThinking: readingThinkingRef.current });
 						const reading = readingThinkingRef.current.trim() || undefined;
 						// The pending-id effect clears this only when the question
 						// actually leaves. An offline preflight keeps the draft visible.
-						submitAnswer(pending.tool, pending.toolCallId, reading ? { ...output, readingThinking: reading } : output);
+						submitAnswer(pending.tool, pending.toolCallId, reading ? { ...output, readingThinking: reading } : output, pending.key);
 					}}
-				/>
+				/>}
 				</Conversation>
 
 				{/* The session-scoped focuses (chrome-melt wave, 2026-09-19): mounted
@@ -1912,10 +1965,12 @@ function DockOverlay({
 	onSubmitThinking,
 	requiresReveal,
 	readingThinking,
+	readingThinkingRevision,
 	onReadingThinking,
 	phase,
 	turns,
 	contextTokens,
+	cliContextWindow,
 	pricing,
 	composer,
 	onSubmitAnswer,
@@ -1929,7 +1984,7 @@ function DockOverlay({
 	setupCta,
 	queuedSteers,
 }: {
-	pending: ReturnType<typeof findPendingToolCall>;
+	pending: ReturnType<typeof pendingQuestionOf>;
 	initialQuestionDraft?: QuestionFormDraft;
 	onSaveQuestionDraft: (draft: QuestionFormDraft) => void;
 	/** Compaction running for this chat (round 14) — the docks' submit
@@ -1946,12 +2001,14 @@ function DockOverlay({
 	/** The reading-thinking draft (owner 2026-10-03) — owned by ChatView so
 	 *  the submit + dismissal seams (outside this overlay) can merge it. */
 	readingThinking: string;
+	readingThinkingRevision: number;
 	onReadingThinking: (v: string) => void;
 	/** Session phase at the pending question — scales the thinking field. */
 	phase: Phase3;
 	/** The session's usage log — the stats bar beneath the composer folds it. */
 	turns: TurnUsage[];
 	contextTokens: number | null;
+	cliContextWindow: ReturnType<typeof cliContextWindowOf>;
 	pricing?: SessionPricing;
 	composer: React.ReactNode;
 	onSubmitAnswer: (output: QuestionAnswerData) => void;
@@ -1988,6 +2045,8 @@ function DockOverlay({
 	// Teach-phase mount (session reload with a pending check): the dock starts
 	// as the collapsed invitation too — the check must not pop open on reload.
 	const [expanded, setExpanded] = useState(!requiresReveal);
+	const phoneDismissedRef = useRef(false);
+	const phone = usePhoneLayout();
 	// Reveal state (W5): false until the learner clicks the invitation. While
 	// false, the scroll machine must NOT auto-expand at the bottom — the
 	// learner reads the teaching first and opens the check when ready. Once
@@ -1995,7 +2054,7 @@ function DockOverlay({
 	const [revealed, setRevealed] = useState(false);
 	const revealPending = requiresReveal && !revealed;
 
-	const pendingId = pending?.toolCallId ?? null;
+	const pendingId = pending?.key ?? null;
 	const initialPendingRef = useRef(pendingId);
 
 	// Teach-question ARRIVAL state, applied during render — BEFORE the
@@ -2011,6 +2070,7 @@ function DockOverlay({
 	if (pendingId !== prevPendingIdRef.current) {
 		const wasQuestion = prevPendingIdRef.current !== null;
 		prevPendingIdRef.current = pendingId;
+		phoneDismissedRef.current = false;
 		if (pendingId && requiresReveal) {
 			const arrival = revealArrival(wasQuestion);
 			setExpanded(arrival.expanded);
@@ -2058,7 +2118,7 @@ function DockOverlay({
 	const shellRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const mode = pending
-		? `question:${pending.toolCallId}`
+		? `question:${pending.key}`
 		: practice
 			? `practice:${practice.toolCallId}`
 			: "chat";
@@ -2191,6 +2251,7 @@ function DockOverlay({
 		});
 	};
 	const expandAndReveal = () => {
+		phoneDismissedRef.current = false;
 		setRevealed(true); // the teach-check invitation was accepted (W5)
 		setExpanded(true);
 		void suppressFoldDuringReveal();
@@ -2209,7 +2270,7 @@ function DockOverlay({
 	useEffect(() => {
 		if (!pending || expanded) return;
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key !== "Enter" || e.altKey) return;
+			if (e.key !== "Enter" || e.altKey || isIOSKeyboard()) return;
 			if (e.shiftKey && !e.metaKey && !e.ctrlKey) return;
 			const t = e.target as HTMLElement | null;
 			if (
@@ -2250,6 +2311,7 @@ function DockOverlay({
 				// left the bottom.
 				if (d > COLLAPSE_DIST && !expandIntentRef.current && !atBottomRef.current) setExpanded(false);
 			} else if (d < EXPAND_DIST) {
+				if (phoneDismissedRef.current) return;
 				// Teach checks stay collapsed until the learner opens them (W5): the
 				// at-bottom auto-expand would pop the form over the teaching.
 				if (requiresRevealRef.current && !revealedRef.current) return;
@@ -2326,7 +2388,16 @@ function DockOverlay({
 	return (
 		<div className="pointer-events-none absolute inset-x-0 bottom-0" style={{ right: sbInset }}>
 			<div className="h-24 bg-gradient-to-t from-background via-background/85 to-transparent" />
-			<div ref={blockRef} className="relative bg-background pb-5">
+			<div ref={blockRef} data-phone-answer={(pending || practice) && expanded ? "expanded" : undefined} className="relative bg-background pb-5">
+				{(pending || practice) && expanded && <button
+					type="button" aria-label="Back to lesson" className="lh-phone-answer-dismiss"
+					onClick={async () => {
+						phoneDismissedRef.current = true;
+						if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+						await finishDictation();
+						setExpanded(false);
+					}}
+				/>}
 				<div className={DOCK}>
 					<div ref={viewportRef} data-dock-viewport="" className="pointer-events-auto">
 					<div ref={bodyRef}>
@@ -2343,6 +2414,7 @@ function DockOverlay({
 					{pending && requiresReveal && (
 						<ReadingThinkingField
 							value={readingThinking}
+							revision={readingThinkingRevision}
 							onChange={onReadingThinking}
 							onEscape={dictationCancel}
 							onOpen={
@@ -2354,10 +2426,10 @@ function DockOverlay({
 										}
 									: undefined
 							}
-							claim={revealPending}
+							claim={phone ? !expanded : revealPending}
 						/>
 					)}
-					<div ref={shellRef} className="pointer-events-auto overflow-hidden rounded-2xl border bg-card shadow-lg">
+					<div ref={shellRef} data-attachment-composer="" className="pointer-events-auto overflow-hidden rounded-2xl border bg-card shadow-lg">
 						{/* Include descendant margins (notably practice thinking's
 						    bottom margin) in the natural content measurement. */}
 						<div
@@ -2378,7 +2450,7 @@ function DockOverlay({
 									initialDraft={initialQuestionDraft}
 									onSaveDraft={onSaveQuestionDraft}
 									onEscape={dictationCancel}
-									dictationClaim={!revealPending}
+									dictationClaim={phone ? expanded : !revealPending}
 									compactionRunning={compactionRunning}
 								/>
 							) : practice ? (
@@ -2387,6 +2459,7 @@ function DockOverlay({
 									input={practice.input as { statement: string }}
 									expanded={expanded}
 									onExpand={() => {
+										phoneDismissedRef.current = false;
 										setExpanded(true);
 										void suppressFoldDuringReveal();
 									}}
@@ -2407,6 +2480,7 @@ function DockOverlay({
 					<StatsBar
 						turns={turns}
 						contextTokens={contextTokens}
+						cliContextWindow={cliContextWindow}
 						pricing={pricing}
 						dictationSlot={dictationSlot}
 						chatId={chatId}

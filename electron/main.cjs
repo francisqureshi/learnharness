@@ -24,7 +24,8 @@
  *     would shadow every settings-page key change until restart.
  */
 
-const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, session, shell, dialog } = require("electron");
+const { pickAttachmentPath } = require("./attachment-picker.cjs");
 const { createChatGPT, fileStore } = require("./chatgpt.cjs");
 const { attachChatGPTChild, trustedSender, chatGPTControl } = require("./chatgpt-ipc.cjs");
 const { createSubscriptions, loadSubscriptionSDK } = require("./subscriptions.cjs");
@@ -42,7 +43,8 @@ const path = require("node:path");
 // renderer owns the number; this is the IPC widen target).
 const SIDEBAR_AUTOCLOSE = 928;
 
-const PRODUCT_NAME = "LearnHarness";
+const REMOTE = require("./remote-mode.cjs").remoteMode(require("../package.json"));
+const PRODUCT_NAME = REMOTE?.name ?? "LearnHarness";
 
 // APP NAME → userData (owner, 2026-10-10): the Application Support dir is
 // exactly "LearnHarness" in dev AND packaged. Packaged Electron would
@@ -113,7 +115,7 @@ if (process.argv.includes("--browser-service")) {
 	// its own userData so (a) the single-instance lock — checked below — doesn't
 	// silently kill it, and (b) it never reads/writes the real app's
 	// localStorage, auth.json, or logs. Must run before the lock check.
-	if (process.env.LH_DEV_URL) {
+	if (!REMOTE && process.env.LH_DEV_URL) {
 		app.setPath("userData", `${app.getPath("userData")}-dev`);
 	}
 
@@ -316,7 +318,7 @@ function createWindow(url) {
 			contextIsolation: true,
 			sandbox: true,
 			nodeIntegration: false,
-			...(process.env.LH_DEV_URL ? { additionalArguments: ["--lh-web-subscriptions"] } : {}),
+			...(REMOTE ? { additionalArguments: ["--lh-web-subscriptions", "--lh-remote-uploads"] } : process.env.LH_DEV_URL ? { additionalArguments: ["--lh-web-subscriptions"] } : {}),
 			preload: path.join(__dirname, "preload.cjs"),
 		},
 		// Live-resize + first-paint flash (owner, 2026-09-17): during a resize
@@ -371,7 +373,23 @@ function createWindow(url) {
 		return { action: "deny" };
 	});
 
-	void win.loadURL(url);
+	if (REMOTE) {
+		let showingFailure = false;
+		win.webContents.on("did-fail-load", async (_event, code, _description, _url, isMainFrame) => {
+			if (!isMainFrame || code === -3 || showingFailure || win.isDestroyed()) return;
+			showingFailure = true;
+			win.show();
+			const { response } = await dialog.showMessageBox(win, {
+				type: "warning", title: PRODUCT_NAME, message: "Cannot reach hws",
+				detail: "Check your internet and Tailscale connection, then retry. Your saved lessons remain on hws.",
+				buttons: ["Retry", "Quit"], defaultId: 0, cancelId: 1,
+			});
+			showingFailure = false;
+			if (response === 0 && !win.isDestroyed()) void win.loadURL(url).catch(() => {});
+			else app.quit();
+		});
+	}
+	void win.loadURL(url).catch((error) => log(`window load failed: ${error.message}`));
 	// Zoom truth reaches the renderer for EVERY load (reload, nav): the
 	// renderer's --lh-zoom must never go stale. The fallback catcher below
 	// covers ⌘= / layout variants the menu's ⌘Plus may not claim — menu-
@@ -504,8 +522,8 @@ function installUpdateNow() {
 }
 
 function setupAutoUpdater() {
-	if (!app.isPackaged) {
-		log("auto-update: dev build — updater disabled");
+	if (REMOTE || !app.isPackaged) {
+		log("auto-update: preview/dev build — updater disabled");
 		reportUpdateStatus("disabled");
 		return;
 	}
@@ -649,7 +667,7 @@ async function main() {
 	// Dev mode: point at a running `next dev` server (LH_DEV_URL) — no
 	// spawn, no packaging, full HMR. The rest of this shell still applies
 	// (guards, menu, single instance).
-	const devUrl = process.env.LH_DEV_URL;
+	const devUrl = REMOTE?.origin ?? process.env.LH_DEV_URL;
 	const url = devUrl ?? `http://127.0.0.1:${await freePort()}`;
 	if (!devUrl) {
 		desktopAPISecret = randomBytes(32).toString("hex");
@@ -707,6 +725,11 @@ async function main() {
 	ipcMain.handle("lh:subscriptions:web-browser", async (event, action) => {
 		if (!devUrl || !trustedAppWindows.has(BrowserWindow.fromWebContents(event.sender)) || !trustedSender(event, new URL(url).origin, BrowserWindow)) throw new Error("Untrusted development request.");
 		await openWebSubscriptionBrowser(action, new URL(url).origin, { openExternal: (target) => shell.openExternal(target) });
+	});
+
+	ipcMain.handle("lh:attachment:pick", (event, mode) => {
+		if (REMOTE) throw new Error("Folder uploads are not available in the hws preview.");
+		return pickAttachmentPath(event, mode, { BrowserWindow, dialog, trustedAppWindows, origin: new URL(url).origin });
 	});
 
 	installMenu();

@@ -1,5 +1,9 @@
 "use client";
 
+import { PhoneHeader } from "@/components/phone-chrome";
+import { NewSession } from "@/components/new-session";
+import { isPhoneLayout, usePhoneLayout } from "@/components/phone-layout";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CornerDownLeftIcon, DumbbellIcon } from "lucide-react";
@@ -13,6 +17,8 @@ import { useFieldCycle } from "@/components/field-cycle";
 import { SidebarToggle } from "@/components/sidebar";
 import { StatsBar } from "@/components/stats-bar";
 import { OPENING_PROMPT_FAILURE } from "@/components/opening-prompt";
+import { PathInput } from "@/components/path-input";
+import { AttachFilesButton } from "@/components/attach-files-button";
 import { SessionStarter } from "@/components/start-session";
 import type { TurnUsage } from "@/src/core";
 
@@ -22,7 +28,25 @@ import type { TurnUsage } from "@/src/core";
  * under the header and the new-session dock, both of which float over it
  * with no gradient scrims. Sessions live in the toggleable sidebar.
  */
-export function Home({
+export function Home({ initialConfigured, rendering = true, showGraphOnPhone = false }: { initialConfigured: boolean; rendering?: boolean; showGraphOnPhone?: boolean }) {
+	const phone = usePhoneLayout();
+	const router = useRouter();
+	useEffect(() => {
+		if (!phone || showGraphOnPhone) return;
+		let cancelled = false;
+		// Only a fresh document launch resumes; returning Home stays Home.
+		if (document.documentElement.dataset.lhResumeChecked) return;
+		void fetch("/api/resume").then(r => r.ok ? r.json() : null).then(data => {
+			if (cancelled) return;
+			document.documentElement.dataset.lhResumeChecked = "true";
+			if (typeof data?.chatId === "string" && /^[A-Za-z0-9_-]+$/.test(data.chatId)) router.replace(`/chat/${data.chatId}`);
+		}).catch(() => {});
+		return () => { cancelled = true; };
+	}, [phone, showGraphOnPhone, router]);
+	return phone && !showGraphOnPhone ? <NewSession initialConfigured={initialConfigured} /> : <GraphHome initialConfigured={initialConfigured} rendering={rendering} />;
+}
+
+function GraphHome({
 	initialConfigured,
 	rendering = true,
 }: {
@@ -64,7 +88,7 @@ export function Home({
 	/* Run end focuses the topic input (owner, 2026-10-01): the hands are on
 	 * the keyboard from the stop. Falling edge only; this surface's only
 	 * dictation target IS this textarea, so no case-split is needed. */
-	const topicInputRef = useRef<HTMLTextAreaElement>(null);
+	const topicInputRef = useRef<HTMLDivElement>(null);
 	// Tab navigates INTO the topic composer (owner, keyboard round
 	// 2026-10-06): the only text field on this surface — and home's
 	// composer is its OWN textarea, not the shared Composer component,
@@ -81,7 +105,7 @@ export function Home({
 			dictationWasActiveRef.current = true;
 		} else if (dictationWasActiveRef.current) {
 			dictationWasActiveRef.current = false;
-			topicInputRef.current?.focus();
+			if (!isPhoneLayout()) topicInputRef.current?.focus();
 		}
 	}, [dictation.active]);
 
@@ -156,7 +180,8 @@ export function Home({
 	};
 
 	return (
-		<div className="relative h-dvh">
+		<div className="lh-graph-page relative h-dvh">
+			<PhoneHeader title="Knowledge graph" />
 			{/* Window-drag strip (merged chrome, owner 2026-09-17): a dedicated
 			    mask element, deliberately FIRST in the DOM. Electron's app-region
 			    mask resolves by DOM order — a no-drag element subtracts only drag
@@ -198,7 +223,7 @@ export function Home({
 			    no app-region of its own: the strip's drag comes from the mask
 			    div above, and the toggle's lh-no-drag subtracts from it (it is
 			    later in the tree, so the subtraction sticks). */}
-			<header className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
+			<header className="lh-desktop-header pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 py-2">
 				<div className="pointer-events-auto">
 					<SidebarToggle />
 				</div>
@@ -242,19 +267,21 @@ export function Home({
 					/>
 					{startError && <p role="alert" className="mb-2 text-sm text-destructive">{OPENING_PROMPT_FAILURE}</p>}
 					<form
+						data-attachment-composer=""
 						className="flex items-end gap-1.5 rounded-2xl border bg-card p-1.5 shadow-lg"
 					onSubmit={(e) => {
 						e.preventDefault();
 						void start();
 					}}
 				>
-					<textarea
+					<PathInput
 						ref={topicInputRef}
 						value={topic}
-						onChange={(e) => {
-							topicRef.current = e.target.value;
-							setTopic(e.target.value);
+						onValueChange={(value) => {
+							topicRef.current = value;
+							setTopic(value);
 						}}
+						defaultDropTarget
 						onKeyDown={(e) => {
 							// Esc ends dictation (the dictate decisions: click-again or
 							// Esc) — stopPropagation claims it (keyboard wave A) so
@@ -272,9 +299,9 @@ export function Home({
 						}}
 						placeholder={mode === "practice" ? "What do you want to practice?" : "What do you want to learn?"}
 						autoFocus
-						rows={1}
 						className="field-sizing-content lh-input max-h-48 min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2 outline-none placeholder:text-muted-foreground"
 					/>
+					<AttachFilesButton editorRef={topicInputRef} />
 					{/* No tooltip on the start square — the ↵ glyph is the
 					    affordance (owner, subtlety round 2026-09-25). */}
 					<button

@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowDownIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
+import { isIOSKeyboard, useIOSKeyboard } from "./keyboard-platform";
 import { useEnterSubmits } from "@/components/enter-submits";
+import { PhoneDictationSlot } from "@/components/phone-chrome";
+import { PathInput } from "@/components/path-input";
+import { MalformedQuestion } from "@/components/malformed-question";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { cn } from "@/lib/utils";
 import {
@@ -131,11 +135,7 @@ export function QuestionDock({
 	const parsed =
 		canonical === "quiz" ? parseQuizInput(input) : canonical === "explain" ? parseExplainInput(input) : parseAskInput(input);
 	if (!parsed) {
-		return (
-			<div data-testid="malformed-question" className="rounded-xl border border-dashed bg-card/60 p-3 text-sm text-muted-foreground">
-				This question arrived malformed — the transcript keeps the retry.
-			</div>
-		);
+		return <MalformedQuestion />;
 	}
 	return (
 		<>
@@ -266,6 +266,7 @@ function QuestionDockForm({
 	compactionRunning = false,
 }: Omit<QuestionDockProps, "expanded" | "onExpand" | "reveal">) {
 	const kind = toolQuestionKind(toolName);
+	const iosKeyboard = useIOSKeyboard();
 
 	// Canonical QuestionData, built once per question. Quiz options are
 	// deterministically shuffled (seeded by toolCallId) so position never leaks
@@ -338,6 +339,11 @@ function QuestionDockForm({
 	// deliberate (the same number, the same meaning). The dock unmounts
 	// between questions, so each question starts fresh at 50.
 	const [confIdx, setConfIdx] = useState<number>(initialDraft?.confidenceIndex ?? DEFAULT_CONFIDENCE_INDEX);
+	const saveDraftRef = useRef(onSaveDraft);
+	saveDraftRef.current = onSaveDraft;
+	useEffect(() => {
+		saveDraftRef.current?.({ selection: sel, thinking, other, text, confidenceIndex: confIdx });
+	}, [sel, thinking, other, text, confIdx]);
 	const selectMode: SelectMode = qd.mode === "multi-select" ? "multi-select" : "single-select";
 
 	// The PRIMARY dictation input (owner, STT round 1): while a question
@@ -439,8 +445,8 @@ function QuestionDockForm({
 	   expanded — collapsed, the bar's native Enter expands it. */
 	const [kbdIdx, setKbdIdx] = useState<number | null>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
-	const otherInputRef = useRef<HTMLInputElement>(null);
-	const thinkingRef = useRef<HTMLTextAreaElement>(null);
+	const otherInputRef = useRef<HTMLDivElement>(null);
+	const thinkingRef = useRef<HTMLDivElement>(null);
 	// One row past the options is the trailing row: quiz → don't-know,
 	// ask → Other (a question never has both). Text mode (ask/explain)
 	// has no rows — the composer IS the answer surface.
@@ -473,13 +479,14 @@ function QuestionDockForm({
 	const focusRow = (idx: number) => {
 		const row = rootRef.current?.querySelector(`[data-kbdrow="${idx}"]`) as HTMLElement | null;
 		if (!row) return;
-		const el = (row.querySelector("input") as HTMLElement | null) ?? row;
+		const el = (row.querySelector("input, [data-file-path-input]") as HTMLElement | null) ?? row;
 		el.focus();
 	};
 
 	useEffect(() => {
 		if (!active || rowCount === 0) return;
 		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Enter" && isIOSKeyboard()) return;
 			const t = e.target as HTMLElement | null;
 			// A TYPING field is where keys mean text (owner round 4): the
 			// thinking/answer fields, search boxes, renames — never a range
@@ -696,11 +703,12 @@ function QuestionDockForm({
 										</span>
 									)}
 								</span>
-								<input
+								<PathInput
 									ref={otherInputRef}
+									singleLine
 									value={other}
-									onChange={(e) => {
-										setOther(e.target.value);
+									onValueChange={(value) => {
+										setOther(value);
 										// Typing selects the row — displacing in
 										// single-select, alongside the siblings in multi.
 										setSel((prev) => (prev.otherSelected ? prev : toggleOther(selectMode, prev)));
@@ -851,11 +859,11 @@ function QuestionDockForm({
 						{qd.mode === "text" ? "Your answer" : "YOUR THINKING"}
 					</div>
 					{qd.mode === "text" ? (
-						<textarea
+						<PathInput
 							value={text}
-							onChange={(e) => {
-								answerTextRef.current = e.target.value;
-								setText(e.target.value);
+							onValueChange={(value) => {
+								answerTextRef.current = value;
+								setText(value);
 							}}
 							onKeyDown={(e) => {
 								// Esc ends dictation (the dictate decisions: click-again
@@ -875,16 +883,15 @@ function QuestionDockForm({
 								}
 							}}
 							placeholder="Type your answer…"
-							rows={1}
 							className="field-sizing-content lh-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-2 outline-none placeholder:text-muted-foreground"
 						/>
 					) : (
-						<textarea
+						<PathInput
 							ref={thinkingRef}
 							value={thinking}
-							onChange={(e) => {
-								thinkingTextRef.current = e.target.value;
-								setThinking(e.target.value);
+							onValueChange={(value) => {
+								thinkingTextRef.current = value;
+								setThinking(value);
 							}}
 							onKeyDown={(e) => {
 								// Esc ends dictation (the dictate decisions: click-again
@@ -905,7 +912,6 @@ function QuestionDockForm({
 								}
 							}}
 							placeholder="Why this answer? Whatever comes to mind."
-							rows={1}
 							className={cn(
 								"field-sizing-content lh-input max-h-48 w-full resize-none bg-transparent px-2.5 py-2 outline-none placeholder:text-muted-foreground/70",
 								// Phase-scaled prominence: teaching invites depth,
@@ -915,15 +921,16 @@ function QuestionDockForm({
 						/>
 					)}
 					<div className="flex items-center justify-between gap-2 p-1">
-						<span aria-hidden className="pl-1.5 text-xs text-muted-foreground">
-								{compactionRunning ? "compacting session…" : "↵ submits · ⇧↵ newline"}
+						{active && <PhoneDictationSlot />}
+						<span aria-hidden className="lh-answer-key-hint pl-1.5 text-xs text-muted-foreground">
+								{compactionRunning ? "compacting session…" : iosKeyboard ? "↵ newline" : "↵ submits · ⇧↵ newline"}
 						</span>
 						<Button
-							type="submit"
+							type="submit" aria-label="Submit answer"
 							disabled={!canSubmit || compactionRunning}
 							className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
 						>
-							Submit answer
+							<span className="lh-desktop-submit-label">Submit answer</span><ArrowUpIcon className="lh-mobile-submit-icon" />
 						</Button>
 					</div>
 				</div>
