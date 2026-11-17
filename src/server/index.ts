@@ -59,3 +59,5 @@ export { customProviderGet, customProviderMutation } from "./custom-provider-htt
 export { activeUploads, uploadResponse, uploadsStatusResponse } from "./uploads.ts";
 
 export { readLastLesson, writeLastLesson } from "../store/learning-resume.ts";
+
+export { githubControlsResponse, githubCallbackResponse, githubRegistrationResponse } from "./github-http.ts";

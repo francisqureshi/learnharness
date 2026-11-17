@@ -134,7 +134,7 @@ const webFetchInput = Type.Object({
 	url: Type.String({ description: "The URL to fetch" }),
 });
 
-export function createWebTools(search: () => SearchProvider | null): Record<string, AgentTool<any>> {
+export function createWebTools(search: () => SearchProvider | null, githubConnected = false): Record<string, AgentTool<any>> {
 	return {
 		web_search: {
 			name: "web_search",
@@ -168,6 +168,7 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 			execute: serverExecute("web_fetch", webFetchInput, async ({ url }): Promise<string> => {
 				try {
 					const parsed = new URL(url);
+					if (githubConnected && ["github.com", "api.github.com", "raw.githubusercontent.com"].includes(parsed.hostname)) return "Use the authenticated github tool for GitHub sources. Do not send private repository URLs to public reader services.";
 					// URL.protocol carries a TRAILING COLON ("https:", WHATWG) — the
 					// colon-less comparison born from the py-harness port (urlparse's
 					// scheme has NO colon) rejected every valid URL ever fetched

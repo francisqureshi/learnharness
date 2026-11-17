@@ -17,7 +17,7 @@ try {
  await page.goto(origin);await page.waitForSelector('html.lh-phone');await openSettings();
  assert.equal(await page.$eval('[data-testid="settings-content"]',e=>e.hidden),true);
  assert.equal(await page.$eval('.lh-app-shell',e=>e.inert),true);
- for(const section of ['keys','agent','appearance','graph','keyboard','general']) {
+ for(const section of ['keys','github','agent','appearance','graph','keyboard','general']) {
   await page.click(`[data-testid="settings-nav-${section}"]`);
   await page.waitForSelector(`[data-testid="section-${section}"]`,{visible:true});
   assert.equal(await page.$eval('[data-testid="settings-nav"]',e=>e.hidden),true);
@@ -55,5 +55,5 @@ try {
  await desktop.waitForFunction(()=>Math.abs(document.querySelector('[data-testid="settings-nav"]').getBoundingClientRect().width-176)<0.1);
  assert.equal(await desktop.$eval('[data-testid="settings-nav"]',e=>e.hidden),false);
  assert.equal(await desktop.$('.lh-settings-phone-header'),null);
- console.log('PASS: six mobile categories, navigation, no overflow, touch targets, switch bounds, persistence/restore and desktop layout');
+ console.log('PASS: seven mobile categories, navigation, no overflow, touch targets, switch bounds, persistence/restore and desktop layout');
 } finally { await browser.close(); }

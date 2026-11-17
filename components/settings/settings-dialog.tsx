@@ -48,6 +48,7 @@ import { AgentSection } from "./agent-section.tsx";
 import type { ModelsSettings } from "@/src/core";
 import { MENU_CLOSE_EVENT, MENU_OPEN_EVENT } from "@/components/menu-shell";
 import { notifySettingsSaved } from "@/components/settings-signal";
+import { GitHubSection } from "./github-section.tsx";
 import { KeysSection } from "./keys-section.tsx";
 import { Hint } from "@/components/ui/hint";
 import { AppearanceSection, GraphSection } from "./appearance-section.tsx";
@@ -60,6 +61,7 @@ import { NativeSubscriptionUIProvider } from "./subscription-connections.tsx";
  *  real question users ask). */
 const SECTIONS = [
 	{ id: "keys", label: "Providers" },
+	{ id: "github", label: "GitHub" },
 	{ id: "agent", label: "Agent" },
 	{ id: "appearance", label: "Appearance" },
 	{ id: "graph", label: "Graph" },
@@ -67,7 +69,7 @@ const SECTIONS = [
 	{ id: "general", label: "General" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
-const SECTION_ICONS = { keys: KeyRoundIcon, agent: BotIcon, appearance: PaletteIcon, graph: NetworkIcon, keyboard: KeyboardIcon, general: SettingsIcon };
+const SECTION_ICONS = { github: NetworkIcon, keys: KeyRoundIcon, agent: BotIcon, appearance: PaletteIcon, graph: NetworkIcon, keyboard: KeyboardIcon, general: SettingsIcon };
 
 /** `open(section?, row?)` — the optional ROW deep-links into the Keys
  *  section with that row unfolded (zero-keys wave: the dictation error's
@@ -411,6 +413,7 @@ export function SettingsDialogBody({
 									<KeysSection initialRow={initialRow ?? undefined} />
 								</SettingsSection>
 							)}
+							{active === "github" && <SettingsSection title="GitHub" testid="section-github"><GitHubSection /></SettingsSection>}
 							{active === "agent" && (
 								<SettingsSection
 									title="Agent"

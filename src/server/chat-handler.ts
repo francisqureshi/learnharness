@@ -1,3 +1,5 @@
+import { githubConnection } from "./github-connection.ts";
+import { createGitHubReader } from "./github-reader.ts";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
 	createPracticeAgent,
@@ -115,6 +117,7 @@ const jobRunner = createJobRunner({
 	// null = honestly unavailable; the dispatch-level drop (below) uses the
 	// same signal so keyless servers never see the research tool at all.
 	searchProvider,
+	githubReader: () => githubConnection().connected() ? createGitHubReader() : undefined,
 });
 /** The app's ONE extraction pipeline instance — both front doors share it:
  *  quiz-triggered session runs (turn-service) and notes imports
@@ -447,6 +450,7 @@ export async function handleChatInput(
 		restoreAutomatic: (automaticIds, retainedIds) => restoreUncommittedAutomatic(chatId, constructed, automaticIds, retainedIds),
 	});
 	const agentOpts: AgentBuildOptions = {
+		github: githubConnection().connected() ? createGitHubReader() : undefined,
 		engine,
 		callPurpose,
 		requestCycle,

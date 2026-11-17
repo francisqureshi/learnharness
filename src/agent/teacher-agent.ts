@@ -1,3 +1,5 @@
+import { githubTools } from "./tools/github.ts";
+import type { GitHubReader } from "../core/github.ts";
 import { emptyAnswerRecovery } from "./empty-answer.ts";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
@@ -101,6 +103,7 @@ export type StepUsageCollector = (usage: Usage) => void;
 
 /** Per-request construction options (the handler wires all of these). */
 export interface AgentBuildOptions {
+	github?: GitHubReader;
 	/** Model + stream function — tests inject a scripted faux engine. */
 	engine?: PiEngine;
 	callPurpose?: { background: boolean };
@@ -207,6 +210,7 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 			// Match Claude across providers (including OpenRouter), not the API
 			// transport. Explicit test registries remain caller-owned.
 			tools: [
+				...githubTools(opts.github),
 				...tools.map((tool) => tool.name === "read" && tool.execute === readTool.execute
 					? { ...tool, execute: createReadTool(engine.model).execute as AgentTool<any>["execute"] }
 					: tool),
