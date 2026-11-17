@@ -20,11 +20,10 @@ import TurndownService from "turndown";
  *
  * SEARCH REWIRING (search port wave, 2026-09-20): the Google CSE backend is
  * retired — web_search now runs on the injected search port (core/search.ts).
- * The live adapter (Tavily/Brave — server/search.ts) arrives as a DEPENDENCY
+ * The live adapter (server/search.ts) arrives as a DEPENDENCY
  * (import law: this tool depends on the core port, never server code). NO
  * silent fallback (owner decision): provider absent → search is honestly
- * unavailable, and the composition root drops the research dispatch tool on
- * the same signal (the jobTools seam, src/agent/tools/jobs.ts).
+ * unavailable. Research dispatch and keyless web_fetch remain available.
  *
  * Tool contract: NEVER throw into the agent loop — missing provider and
  * every failure path return a clear error STRING as the tool output, so the
@@ -135,7 +134,7 @@ const webFetchInput = Type.Object({
 	url: Type.String({ description: "The URL to fetch" }),
 });
 
-export function createWebTools(search: () => SearchProvider | null): Record<string, AgentTool<any>> {
+export function createWebTools(search: () => SearchProvider | null, githubConnected = false): Record<string, AgentTool<any>> {
 	return {
 		web_search: {
 			name: "web_search",
@@ -148,7 +147,7 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 				if (!provider) {
 					return (
 						"web_search is not available: no search engine is configured. " +
-						"Set a Tavily or Brave search API key in settings. Report in your brief that web search is unavailable."
+						"Set a Tavily, Brave, Exa, Firecrawl, or Ollama search API key in settings. Report in your brief that web search is unavailable."
 					);
 				}
 				try {
@@ -169,6 +168,7 @@ export function createWebTools(search: () => SearchProvider | null): Record<stri
 			execute: serverExecute("web_fetch", webFetchInput, async ({ url }): Promise<string> => {
 				try {
 					const parsed = new URL(url);
+					if (githubConnected && ["github.com", "api.github.com", "raw.githubusercontent.com"].includes(parsed.hostname)) return "Use the authenticated github tool for GitHub sources. Do not send private repository URLs to public reader services.";
 					// URL.protocol carries a TRAILING COLON ("https:", WHATWG) — the
 					// colon-less comparison born from the py-harness port (urlparse's
 					// scheme has NO colon) rejected every valid URL ever fetched

@@ -611,3 +611,69 @@ describe("Retry eligibility and temporary omissions (pure)", () => {
 		assert.equal(failedResponseAtEnd([user, failed("old"), aborted]), undefined);
 	});
 });
+
+describe("empty completed replies", () => {
+	it("automatically retries once without duplicating the learner message", async () => {
+		const { engine, contexts } = scripted([
+			() => fauxAssistantMessage(""),
+			() => fauxAssistantMessage("I’ll use more visual explanations."),
+		]);
+		const chat = createConfiguredChat("Test: empty response recovery");
+		await turn(engine, chat.id, { type: "text", text: "I find diagrams helpful" });
+		assert.equal(contexts.length, 2);
+		const saved = chatStore.getChat(chat.id)!.messages;
+		assert.equal(saved.filter(m => m.role === "user").length, 1);
+		assert.match(JSON.stringify(saved.at(-1)), /visual explanations/);
+	});
+
+	it("does not reexecute a completed tool during empty-answer recovery", async () => {
+		let executions = 0;
+		const { engine, contexts } = scripted([
+			() => fauxAssistantMessage([fauxToolCall("save_note", {}, { id: "note-empty" })], { stopReason: "toolUse" }),
+			() => fauxAssistantMessage(""), () => fauxAssistantMessage("The note is saved."),
+		]);
+		const tools: AgentBuildOptions["tools"] = { save_note: {
+			name: "save_note", label: "save_note", description: "Save fixture note", parameters: Type.Object({}),
+			execute: async () => { executions++; return { content: [{ type: "text", text: "Saved" }], details: {} }; },
+		} };
+		const chat = createConfiguredChat("Test: empty recovery after tool");
+		await turn(engine, chat.id, { type: "text", text: "save a note" }, opts => createTeacherAgent(undefined, { ...opts, engine, tools }));
+		assert.equal(executions, 1);
+		assert.equal(contexts.length, 3);
+		assert.equal(chatStore.getChat(chat.id)!.messages.filter(m => m.role === "toolResult").length, 1);
+	});
+
+	it("does not retry an abort or a nonempty answer", async () => {
+		const aborted = scripted([() => fauxAssistantMessage("", { stopReason: "aborted" })]);
+		const chat = createConfiguredChat("Test: deliberate stop");
+		await turn(aborted.engine, chat.id, { type: "text", text: "hello" });
+		assert.equal(aborted.contexts.length, 1);
+		const answered = scripted([() => fauxAssistantMessage("Hello!")]);
+		await turn(answered.engine, chat.id, { type: "text", text: "hello again" });
+		assert.equal(answered.contexts.length, 1);
+	});
+
+	it("a transport failure on the recovery request remains manually retryable", async () => {
+		const { engine, contexts } = scripted([() => fauxAssistantMessage(""), networkFailure]);
+		const chat = createConfiguredChat("Test: empty then network failure");
+		await turn(engine, chat.id, { type: "text", text: "hello" });
+		assert.equal(contexts.length, 2);
+		assert.ok(endsInFailedTurn(chatStore.getChat(chat.id)!.messages));
+	});
+
+	it("two empty replies become a saved, manually retryable error", async () => {
+		const { engine, contexts } = scripted([
+			() => fauxAssistantMessage(""), () => fauxAssistantMessage("   "),
+			() => fauxAssistantMessage("Now I can answer."),
+		]);
+		const chat = createConfiguredChat("Test: bounded empty recovery");
+		await turn(engine, chat.id, { type: "text", text: "Please explain" });
+		assert.equal(contexts.length, 2);
+		const saved = chatStore.getChat(chat.id)!.messages;
+		assert.ok(endsInFailedTurn(saved));
+		assert.match(JSON.stringify(saved.at(-1)), /returned no answer/);
+		assert.equal((await turn(engine, chat.id, { type: "retry" })).status, 200);
+		assert.equal(chatStore.getChat(chat.id)!.messages.filter(m => m.role === "user").length, 1);
+		assert.match(JSON.stringify(chatStore.getChat(chat.id)!.messages.at(-1)), /Now I can answer/);
+	});
+});

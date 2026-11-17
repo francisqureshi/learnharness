@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import net from "node:net";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { ChatGPTStatus } from "../src/core/contracts/chatgpt.ts";
 import { completedWithin } from "./completion.ts";
@@ -18,7 +19,7 @@ async function signed(client: string, nonce: string, subject = "scratch-user", o
 	return new SignJWT({ nonce, email: "dummy@example.invalid", ...overrides }).setProtectedHeader({ alg: "RS256", kid: "scratch-key" }).setIssuer("https://auth.openai.com").setSubject(subject).setAudience(client).setIssuedAt().setExpirationTime("1h").sign(privateKey);
 }
 function deferred<T = void>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { resolve, promise }; }
-function fixture(options: { state?: any; expires?: number; timeoutMs?: number; token?: (form: URLSearchParams, url: URL) => Promise<Response>; write?: (next: any) => Promise<void>; read?: () => void; change?: (push: any) => void; provider?: (target: string, init: RequestInit) => Promise<Response | undefined> } = {}) {
+function fixture(options: { callbackPort?: number; state?: any; expires?: number; timeoutMs?: number; token?: (form: URLSearchParams, url: URL) => Promise<Response>; write?: (next: any) => Promise<void>; read?: () => void; change?: (push: any) => void; provider?: (target: string, init: RequestInit) => Promise<Response | undefined> } = {}) {
 	let saved = structuredClone(options.state ?? initial());
 	let url!: URL;
 	let writeCount = 0;
@@ -28,6 +29,7 @@ function fixture(options: { state?: any; expires?: number; timeoutMs?: number; t
 		store: { async read() { options.read?.(); return structuredClone(saved); }, async write(next: any) { writeCount++; await options.write?.(next); saved = structuredClone(next); } },
 		openExternal: async (value: string) => { url = new URL(value); },
 		timeoutMs: options.timeoutMs ?? 5000,
+		callbackPort: options.callbackPort,
 		onChange: (push: any) => { options.change?.(push); if (!push.status.pending) changed.resolve(); },
 		fetch: async (target: string, init: RequestInit = {}) => {
 			const form = init.body instanceof URLSearchParams ? init.body : undefined;
@@ -681,4 +683,31 @@ test("private leases bind active account, authority revision and raw visible mod
 		for (const mutation of [{ expectedAccountId: "another" }, { expectedAuthorityRevision: catalog.authorityRevision - 1 }, { selectedModelId: "hidden" }]) await assert.rejects(f.rawLease(false, { ...expected, ...mutation }));
 		assert.equal((await f.rawLease(false, expected)).accountId, catalog.accountId);
 	} finally { f.service.close(); }
+});
+
+
+test("fixed loopback callback supports a tunnel and fails closed when its port is occupied", async () => {
+  const occupied = net.createServer();
+  await new Promise<void>(resolve => occupied.listen(0, "127.0.0.1", resolve));
+  const address = occupied.address();
+  assert(address && typeof address !== "string");
+  const f = fixture({ callbackPort: address.port });
+  try {
+    assert.equal((await f.service.login()).pending, false);
+    assert.equal(Boolean(f.url), false, "must not open auth on a random fallback port");
+    assert.equal(f.requests.length, 0);
+    await new Promise<void>((resolve, reject) => occupied.close(error => error ? reject(error) : resolve()));
+    await f.service.login();
+    const callback = new URL(f.url.searchParams.get("redirect_uri")!);
+    assert.equal(callback.hostname, "127.0.0.1");
+    assert.equal(callback.port, String(address.port));
+    assert.equal((await f.callback()).status, 200);
+    await completedWithin((async () => { while ((await f.service.status()).pending) await new Promise(resolve => setTimeout(resolve, 5)); })(), "fixed-port sign-in");
+    assert.equal(f.saved.registrations.length, 1);
+    assert.equal(f.requests.find(r => r.form?.get("grant_type") === "authorization_code")?.form?.get("redirect_uri"), callback.href);
+  } finally { f.service.close(); if (occupied.listening) occupied.close(); }
+});
+
+test("invalid callback ports are rejected before starting authentication", () => {
+  for (const callbackPort of [-1, 65536, NaN, 1.5]) assert.throws(() => fixture({ callbackPort }), /callback port/);
 });

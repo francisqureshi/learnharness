@@ -1,0 +1,21 @@
+name: LearnHarnessKeyboard
+options:
+  deploymentTarget:
+    iOS: '16.0'
+targets:
+  KeyboardTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [KeyboardTests.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.learnharness.keyboardtests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  KeyboardTests:
+    build:
+      targets:
+        KeyboardTests: all
+    test:
+      targets: [KeyboardTests]

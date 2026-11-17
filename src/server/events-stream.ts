@@ -61,6 +61,9 @@ export function eventsResponse(): Response {
 				const { type, ...payload } = event;
 				frame(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
 			});
+			// Flush headers immediately: EventSource open triggers client resync.
+			// Without a first frame an idle reconnect waits for the 25s heartbeat.
+			frame(": connected\n\n");
 			heartbeat = setInterval(() => frame(": ping\n\n"), 25_000);
 
 			teardown = stop;

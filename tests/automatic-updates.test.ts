@@ -13,7 +13,7 @@ const mainFile = fileURLToPath(new URL("../electron/main.cjs", import.meta.url))
 const mainSource = readFileSync(mainFile, "utf8");
 const mainRequire = createRequire(mainFile);
 
-function fixture({ packaged = true, updaterMissing = false } = {}) {
+function fixture({ packaged = true, updaterMissing = false, remote = false } = {}) {
 	let settings: string | Error = JSON.stringify({ version: 1, general: { autoUpdate: true } });
 	const settingsReads: string[] = [];
 	const order: string[] = [];
@@ -57,7 +57,7 @@ function fixture({ packaged = true, updaterMissing = false } = {}) {
 		minimized = false;
 		focused = false;
 		constructor() { super(); windows.push(this); }
-		loadURL() { this.webContents.loading = true; }
+		loadURL() { this.webContents.loading = true; return Promise.resolve(); }
 		isMinimized() { return this.minimized; }
 		restore() { this.minimized = false; }
 		focus() { this.focused = true; }
@@ -87,6 +87,7 @@ function fixture({ packaged = true, updaterMissing = false } = {}) {
 	const context = createContext({
 		require: (id: string) => {
 			if (id === "electron") return electron;
+			if (id === "../package.json" && remote) return { lhRemoteOrigin: "https://hws.tail0d91b.ts.net:10443" };
 			if (id === "electron-updater") {
 				if (updaterMissing) throw new Error("missing updater");
 				return { autoUpdater: updater };
@@ -296,4 +297,18 @@ describe("startup, timer, trusted IPC and menu wiring", () => {
 		f.windows[0]!.webContents.fails = true; f.windows[0]!.webContents.loading = false;
 		f.menuCheck(); assert.equal(f.updater.checks, 1);
 	});
+});
+
+
+it("packaged hws preview never starts a backend or wires upstream updates", async () => {
+	const f = fixture({ remote: true });
+	f.run('startServer = () => { throw new Error("Local backend must not start"); }');
+	await f.run("main()");
+	await f.check(true);
+	f.run("installUpdateNow()");
+	assert.equal(f.state().status, "disabled");
+	assert.equal(f.updater.checks, 0);
+	assert.equal(f.intervals.length, 0);
+	assert.deepEqual(f.settingsReads, []);
+	assert.deepEqual(f.order, []);
 });

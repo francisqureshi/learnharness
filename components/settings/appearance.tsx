@@ -4,12 +4,9 @@
  * record's appearance section actually DOES something — resolved against
  * the factory defaults and applied as RUNTIME CSS variables on <html>.
  *
- * Why variables and not className swaps: every seam the settings touch was
- * built token-first (--font-prose, --lh-prose-size, --lh-ink-strong, …),
- * so application is setProperty and nothing re-renders. The ONE thing the
- * variables can't reach — the mode — is dark-only this wave (the light
- * palette is designed in the later design wave; <html class="dark"> is
- * static in app/layout.tsx).
+ * System appearance chooses Kanso Pearl or the existing dark palette.
+ * Custom color overrides belong to the original dark palette; typography
+ * remains shared. No server preference overrides the device's light/dark mode.
  *
  * The provider is mounted at the ROOT LAYOUT level (like ActivityProvider):
  * every page picks appearance up on load. The settings page writes a
@@ -20,6 +17,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useSystemAppearance } from "../system-appearance";
 import { FACTORY_SETTINGS, type AppearanceSettings } from "@/src/core";
 
 /** The resolved, fully-concrete appearance view (delta + factory merged). */
@@ -74,9 +72,9 @@ export function derivedPalette(background: string): Record<string, string> {
 /** THE mapping: resolved appearance → the CSS variables to set on <html>.
  *  Absent entries = leave the factory stylesheet value in place. Pure —
  *  exported for tests. */
-export function appearanceVars(a: ReturnType<typeof resolveAppearance>): Record<string, string> {
+export function appearanceVars(a: ReturnType<typeof resolveAppearance>, mode: "dark" | "light" = "dark"): Record<string, string> {
 	const vars: Record<string, string> = {};
-	if (a.background !== null) Object.assign(vars, derivedPalette(a.background));
+	if (mode === "dark" && a.background !== null) Object.assign(vars, derivedPalette(a.background));
 	if (a.fontFamily !== null) {
 		vars["--font-prose"] = `"${a.fontFamily}", var(--font-sans3), ui-sans-serif, system-ui, sans-serif`;
 	}
@@ -90,8 +88,8 @@ export function appearanceVars(a: ReturnType<typeof resolveAppearance>): Record<
 	// Markdown rendering: heading weight + the emphasis inks (the vars
 	// were built "ready for the settings UI").
 	vars["--lh-heading-weight"] = String(a.mdRendering.headingWeight);
-	if (a.mdRendering.boldColor !== null) vars["--lh-ink-strong"] = a.mdRendering.boldColor;
-	if (a.mdRendering.italicColor !== null) vars["--lh-ink-italic"] = a.mdRendering.italicColor;
+	if (mode === "dark" && a.mdRendering.boldColor !== null) vars["--lh-ink-strong"] = a.mdRendering.boldColor;
+	if (mode === "dark" && a.mdRendering.italicColor !== null) vars["--lh-ink-italic"] = a.mdRendering.italicColor;
 	return vars;
 }
 
@@ -124,11 +122,13 @@ export function useAppearance() {
 }
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
+	const mode = useSystemAppearance();
+	useEffect(() => { document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches); }, [mode]);
 	const [delta, setDelta] = useState<AppearanceSettings | undefined>(undefined);
 	const appliedRef = useRef<string>("");
 
 	// The vars apply on every change — stringified as the change signal.
-	const vars = useMemo(() => appearanceVars(resolveAppearance(delta)), [delta]);
+	const vars = useMemo(() => appearanceVars(resolveAppearance(delta), mode), [delta, mode]);
 	const key = useMemo(() => JSON.stringify(vars), [vars]);
 	// REMOVAL is half the job (owner repro, fix wave): a later write that
 	// OMITS a var (empty field = factory, serif toggle back on) must clear
@@ -178,8 +178,8 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
 	}, []);
 
 	const value = useMemo(
-		() => ({ appearance: resolveAppearance(delta), onAppearanceChange }),
-		[delta, onAppearanceChange],
+		() => ({ appearance: { ...resolveAppearance(delta), mode }, onAppearanceChange }),
+		[delta, mode, onAppearanceChange],
 	);
 	return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
 }

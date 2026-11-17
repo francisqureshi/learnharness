@@ -35,6 +35,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { isIOSKeyboard } from "./keyboard-platform";
 import { isTypingSurface } from "@/src/core";
 
 /** Overlay roots whose buttons keep native Enter (hand-rolled menus mark
@@ -64,7 +65,7 @@ export function useEnterSubmits(submit: () => void): void {
 	submitRef.current = submit;
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== "Enter") return;
+			if (e.key !== "Enter" || isIOSKeyboard()) return;
 			if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
 			if (isTypingSurface(e)) return;
 			const target = e.target as HTMLElement | null;

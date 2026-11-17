@@ -1,3 +1,6 @@
+import { subscriptionRequestOrigin } from "./request-origin.ts";
+export { subscriptionRequestOrigin } from "./request-origin.ts";
+import { githubBrowserResponse } from "./github-http.ts";
 import { NATIVE_SUBSCRIPTIONS } from "../core/contracts/subscriptions.ts";
 import { webSubscriptionOwner, webSubscriptionsEnabled, webSubscriptionStatus } from "./web-subscriptions.ts";
 
@@ -5,15 +8,7 @@ const HEADERS = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
 /** Same-origin browser controls, not user authentication. Web/dev deliberately
  * retains the existing shared-server/API-key trust model. Never trust forwarded
  * origins or add CORS grants here. A public deployment needs its own access gate. */
-export function subscriptionRequestOrigin(request: Request): string | undefined {
-	try {
-		const url = new URL(request.url);
-		const host = request.headers.get("host") ?? url.host;
-		const addressed = new URL(`${url.protocol}//${host}`);
-		if (!["http:", "https:"].includes(addressed.protocol) || addressed.username || addressed.password || addressed.pathname !== "/" || addressed.search || addressed.hash) return;
-		return addressed.origin;
-	} catch { return; }
-}
+
 function authorized(request: Request): boolean {
 	const origin = subscriptionRequestOrigin(request);
 	if (!origin || request.headers.get("x-learnharness-subscriptions") !== "1") return false;
@@ -62,6 +57,8 @@ export async function subscriptionBrowserResponse(request: Request): Promise<Res
 	if (!origin || (request.method === "POST" ? !authorized(request) : request.headers.get("sec-fetch-site") !== "same-origin")) return error("Open sign-in from LearnHarness.", 403);
 	const id = new URL(request.url).searchParams.get("id");
 	if (!id || !/^[0-9a-f-]{36}$/.test(id)) return error("This sign-in action is no longer available.", 410);
+	const github = githubBrowserResponse(id, origin);
+	if (github) return github;
 	const target = await webSubscriptionOwner().takeBrowserAction(id, origin);
 	if (!target) return error("This sign-in action is no longer available.", 410);
 	return new Response(null, { status: 303, headers: { ...HEADERS, Location: target } });

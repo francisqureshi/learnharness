@@ -41,6 +41,7 @@ export function createWebSubscriptionOwner(options: {
 	directory: string;
 	chatgptStore?: Parameters<typeof createChatGPT>[0]["store"];
 	sdk?: unknown;
+	callbackPort?: number;
 	onPacket?: (channel: Channel, packet: Packet) => void;
 } ) {
 	const notify = options.onPacket ?? (() => {});
@@ -53,6 +54,7 @@ export function createWebSubscriptionOwner(options: {
 		captured.push(target);
 	};
 	const chatgpt = createChatGPT({
+		callbackPort: options.callbackPort ?? 0,
 		store: options.chatgptStore ?? fileStore(path.join(options.directory, "chatgpt-credentials.json")),
 		openExternal,
 		onChange: (packet?: Packet) => { if (packet) notify("lh:chatgpt", packet); },
@@ -97,7 +99,10 @@ export function webSubscriptionOwner() {
 	if (!webSubscriptionsEnabled()) throw new Error("Web subscription controls are unavailable in desktop-owned mode.");
 	const state = registry();
 	if (!state.owner) {
-		state.owner = createWebSubscriptionOwner({ directory: path.dirname(AUTH_FILE), onPacket: publish });
+		state.owner = createWebSubscriptionOwner({
+			directory: path.dirname(AUTH_FILE), onPacket: publish,
+			callbackPort: process.env.LH_CHATGPT_CALLBACK_PORT === undefined ? 0 : Number(process.env.LH_CHATGPT_CALLBACK_PORT),
+		});
 		process.once("exit", () => state.owner?.close());
 	}
 	return state.owner;

@@ -783,6 +783,13 @@ export class GraphCanvasRenderer {
 		this.markDirty();
 	}
 
+	/** Repaint system appearance without resetting camera or active physics. */
+	setColors(colors: CanvasData["colors"]): void {
+		if (!this.data) return;
+		this.data.colors = colors;
+		this.markDirty();
+	}
+
 	setSettings(settings: GraphRenderSettings): void {
 		this.settings = settings;
 		this.geoVersion++; // sizes/wrap width changed → rebuild geometry

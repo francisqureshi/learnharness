@@ -1,3 +1,4 @@
+import type { GitHubReader } from "../../core/github.ts";
 import type { PiEngine } from "../models.ts";
 import type { SearchProvider } from "../../core/search.ts";
 import {
@@ -30,6 +31,7 @@ import { runDemoBuilder } from "./demo-builder.ts";
 import { runPdfReaderAgent } from "./pdf-reader.ts";
 import { runResearcherAgent } from "./researcher.ts";
 import { runVisualMaker } from "./visual-maker.ts";
+import { loadLearnerImage, type LearnerImage } from "../tools/learner-image.ts";
 
 /**
  * The background job runner (contracts.ts "THE ASYNC PROTOCOL" §2–3), created
@@ -86,6 +88,7 @@ export interface JobRunnerDeps {
 	 *  reports it as recoverable text). Absent seam (tests) reads the same;
 	 *  research dispatch and web_fetch do not require search credentials. */
 	searchProvider?: () => SearchProvider | null;
+	githubReader?: () => GitHubReader | undefined;
 	/** Key-presence gate (provider-key interlude, 2026-09-25): given the
 	 *  resolved engine's provider + the kind's slot tier, return the
 	 *  refusal envelope when the provider's key is missing (null = run).
@@ -373,6 +376,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 			const brief = await runResearcherAgent(prompt, {
 				engine: model,
 				search: deps.searchProvider,
+				github: deps.githubReader?.(),
 				pdfDir,
 				abortSignal: loop.abortSignal,
 				chatId: loop.chatId,
@@ -454,11 +458,19 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 		const input = (passedInput ?? resolveInput(job, passedInput)) as VisualToolInput | undefined;
 		const brief = typeof input?.brief === "string" ? input.brief : "";
+		const imagePath = typeof input?.image === "string" ? input.image : undefined;
 
 		try {
-			jobStore.updateJob(jobId, { activity: "drawing figure" });
+			// Annotation (issue #363): the learner image is read once, here,
+			// and rides into the maker bounded for storage.
+			let image: LearnerImage | undefined;
+			if (imagePath !== undefined) {
+				jobStore.updateJob(jobId, { activity: "loading image" });
+				image = await loadLearnerImage(imagePath, loop.abortSignal);
+			}
+			jobStore.updateJob(jobId, { activity: image ? "annotating image" : "drawing figure" });
 			const result = await runVisualMaker(
-				{ brief },
+				{ brief, image },
 				{
 					engine: model,
 					abortSignal: loop.abortSignal,
@@ -467,6 +479,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 					onActivity: (line) => jobStore.updateJob(jobId, { activity: line }),
 				},
 			);
+			if (image && result.svg && stillRunning(jobId)) chatStore.saveImageSnapshot(job.chatId, image.snapshotId, image);
 			if (isVisualFailure(result) && stillRunning(jobId))
 				jobStore.updateJob(jobId, { error: result.notes ?? "visual build failed" });
 			await finishJob(jobId, result);

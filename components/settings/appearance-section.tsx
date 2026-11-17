@@ -7,9 +7,8 @@
  * variables move IMMEDIATELY (the section's whole point — it must DO
  * something). Hex inputs commit on blur/Enter; the background derives the
  * raised/accent/edge palette in code (components/settings/appearance.tsx).
- * Mode is dark-only this wave: control rendered DISABLED with a note — the
- * light palette is the design wave's work, and a lying control is worse
- * than an honest disabled one.
+ * Appearance follows the device automatically: Kanso Pearl in light mode,
+ * the existing palette and custom colors in dark mode.
  *
  * Graph graying (owner, 2026-09-20) follows the graph viewer's render-panel
  * convention: the whole row dims when a parent is off (stored values
@@ -186,11 +185,10 @@ export function AppearanceSection({
 
 	return (
 		<>
-			<SettingsRow label="Mode" hint="Coming soon" testid="row-mode" dimmed>
-				<ThinSelect value="dark" ariaLabel="mode" onChange={() => {}} testid="select-mode" disabled>
-					<option value="dark">Dark</option>
-				</ThinSelect>
+			<SettingsRow label="Appearance" hint="Follows this device’s system setting" testid="row-mode">
+				<span className="text-sm text-muted-foreground">Automatic · Kanso Pearl / Dark</span>
 			</SettingsRow>
+			<p className="mb-3 text-xs text-muted-foreground">Custom colors below apply to dark mode. Light mode uses Kanso Pearl.</p>
 			<SettingsRow
 				label="Background"
 				hint={`Empty = ${resolved.background ?? "#141414"}`}

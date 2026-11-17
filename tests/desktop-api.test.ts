@@ -54,6 +54,8 @@ test("all methods fail closed for desktop missing/wrong secret; API-only matcher
 	assert(desktopAPIAuthorized(new Headers({ [HEADER]: secret }), { LH_DESKTOP_SERVER: "1", LH_DESKTOP_API_SECRET: secret }));
 	for (const pathname of ["/api/events", "/api/chat", "/api/settings/models", "/api/chats/scratch/markdown"]) assert(unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + pathname }));
 	assert(!unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + "/chat/new" }));
+	for (const pathname of ["/api/uploads", "/api/uploads/"]) assert(!unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + pathname }), "upload handler owns access checks so raw bytes stream directly");
+	assert(unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + "/api/uploads/other" }));
 	const originalMarker = process.env.LH_DESKTOP_SERVER;
 	const originalSecret = process.env.LH_DESKTOP_API_SECRET;
 	try {
