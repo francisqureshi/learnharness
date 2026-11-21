@@ -3,7 +3,8 @@ import { useSyncExternalStore } from "react";
 
 const QUERY = "(prefers-color-scheme: dark)";
 function subscribe(listener: () => void) {
-	const media = window.matchMedia(QUERY);
+	const media = window.matchMedia?.(QUERY);
+	if (!media) return () => {};
 	media.addEventListener("change", listener);
 	return () => media.removeEventListener("change", listener);
 }

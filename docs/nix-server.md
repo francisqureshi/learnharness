@@ -49,11 +49,14 @@ Pin this fork at a reviewed commit in the host flake and import `learnharness.ni
     enable = true;
     package = learnharness.packages.x86_64-linux.default;
     port = 3100;
+    allowedHosts = [ "hws.tail0d91b.ts.net" ];
     chatgptCallbackPort = 1455;
     backup.enable = true;
   };
 }
 ```
+
+For v0.7, configure every private reverse-proxy hostname in `allowedHosts`. Upstream now rejects API requests for unlisted DNS hosts; loopback/IP requests remain available. This option does not expose ports or change the proxy. Apply the hostname configuration together with a future tested package update.
 
 The system service runs as `learnharness`, binds to `127.0.0.1`, starts at boot and restarts on failure. It uses `/var/lib/learnharness/data`, `/var/lib/learnharness/auth.json` and `/var/cache/learnharness`, with owner-only state/cache permissions and a restrictive umask. It opens no firewall ports and does not modify Tailscale routes. Logs will be available with `journalctl -u learnharness` after host integration.
 

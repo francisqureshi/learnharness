@@ -22,6 +22,7 @@ for (const scenario of [
 	const context = vm.createContext({
 		useCallback: (fn: unknown) => fn, chatId: "fixture",
 		fetch: async () => ({ ok: true, json: async () => ({ jobs: [], turnInFlight: scenario.running }) }),
+		statusRef: { current: scenario.local ? "submitted" : "ready" },
 		localStreamRef: { current: scenario.local }, turnInFlightRef: { current: scenario.attaching },
 		jobStatusRef: { current: new Map() }, firstFetchRef: { current: false }, pendingSyncRef: { current: false },
 		syncFromServer: async () => { syncs++; }, attachToRunningTurn: () => { attaches++; },

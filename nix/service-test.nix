@@ -5,7 +5,7 @@ pkgs.testers.runNixOSTest {
     imports = [ ./module.nix ];
     virtualisation.memorySize = 4096;
     virtualisation.cores = 2;
-    services.learnharness = { enable = true; inherit package; port = 3199; backup.enable = true; };
+    services.learnharness = { enable = true; inherit package; port = 3199; allowedHosts = [ "learnharness.test" ]; backup.enable = true; };
     systemd.tmpfiles.rules = [
       "f /home/lh-isolation-canary 0644 root root - private-home"
       "f /tmp/lh-isolation-canary 0644 root root - private-tmp"
@@ -37,9 +37,9 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:1455/auth/callback?state=invalid") == "400"
     machine.succeed("curl -fsS -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-subscriptions: 1' --data '{\"providerId\":\"chatgpt\",\"op\":\"cancel\"}' http://127.0.0.1:3199/api/subscriptions")
     machine.succeed("test $(stat -c %a /var/lib/learnharness/chatgpt-credentials.json) = 600")
-    machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"mode\":\"light\"}' http://127.0.0.1:3199/api/settings/appearance")
+    machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"proseFontSize\":18}' http://127.0.0.1:3199/api/settings/appearance")
     saved = json.loads(machine.succeed("curl -fsS http://127.0.0.1:3199/api/settings"))
-    assert saved["settings"]["appearance"]["mode"] == "light"
+    assert saved["settings"]["appearance"]["proseFontSize"] == 18
     upload = json.loads(machine.succeed("curl -fsS -X POST -H 'Origin: http://127.0.0.1:3199' -H 'x-learnharness-upload: 1' -H 'x-file-name: lesson.txt' --data-binary 'Uploaded lesson fixture' http://127.0.0.1:3199/api/uploads"))
     machine.succeed("test $(stat -c %a " + shlex.quote(upload["path"]) + ") = 600")
     assert machine.succeed("cat " + shlex.quote(upload["path"])) == "Uploaded lesson fixture"
@@ -67,7 +67,7 @@ pkgs.testers.runNixOSTest {
     archive = machine.succeed("find /var/lib/learnharness-backups -name 'learnharness-*.tar.gz' | head -n 1").strip()
     assert archive
     machine.succeed(f"test $(stat -c %a {archive}) = 600")
-    machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"mode\":\"dark\"}' http://127.0.0.1:3199/api/settings/appearance")
+    machine.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:3199' --data '{\"proseFontSize\":16}' http://127.0.0.1:3199/api/settings/appearance")
     machine.succeed("systemctl stop learnharness.service")
     machine.succeed(f"tar -xzf {archive} -C /var/lib/learnharness")
     machine.succeed("systemctl start learnharness.service")

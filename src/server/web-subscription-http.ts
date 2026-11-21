@@ -1,14 +1,13 @@
-import { subscriptionRequestOrigin } from "./request-origin.ts";
-export { subscriptionRequestOrigin } from "./request-origin.ts";
 import { githubBrowserResponse } from "./github-http.ts";
 import { NATIVE_SUBSCRIPTIONS } from "../core/contracts/subscriptions.ts";
+import { subscriptionRequestOrigin } from "./desktop-access.ts";
 import { webSubscriptionOwner, webSubscriptionsEnabled, webSubscriptionStatus } from "./web-subscriptions.ts";
 
-const HEADERS = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
-/** Same-origin browser controls, not user authentication. Web/dev deliberately
- * retains the existing shared-server/API-key trust model. Never trust forwarded
- * origins or add CORS grants here. A public deployment needs its own access gate. */
+// Lives in desktop-access.ts so proxy.ts can share it without loading the
+// subscription runtime; re-exported for existing callers.
+export { subscriptionRequestOrigin };
 
+const HEADERS = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
 function authorized(request: Request): boolean {
 	const origin = subscriptionRequestOrigin(request);
 	if (!origin || request.headers.get("x-learnharness-subscriptions") !== "1") return false;
