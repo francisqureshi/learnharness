@@ -8,7 +8,7 @@ const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH
 try {
  const page = await browser.newPage();
  await page.setViewport({width:402,height:874,isMobile:true,hasTouch:true});
- await page.goto(origin);
+ await page.goto(new URL("/chat/new", origin).href);
  await page.waitForSelector('html.lh-phone');
  await page.click('[aria-label="Open sidebar"]');
  await page.waitForFunction(() => document.querySelector('aside').getBoundingClientRect().width === 288);

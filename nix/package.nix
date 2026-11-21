@@ -1,7 +1,10 @@
 { lib, buildNpmPackage, nodejs_24, makeWrapper, autoPatchelfHook, callPackage
 , stdenv, chromium, fontconfig, makeFontsConf, jetbrains-mono, source-sans }:
 
-let demoBrowser = callPackage ./demo-browser.nix { }; in
+let
+  demoBrowser = callPackage ./demo-browser.nix { };
+  plugins = callPackage ./plugins.nix { };
+in
 buildNpmPackage {
   pname = "learnharness-server";
   version = (builtins.fromJSON (builtins.readFile ../package.json)).version;
@@ -14,17 +17,35 @@ buildNpmPackage {
     fileset = lib.fileset.unions [
       ../app ../components ../src ../lib ../public ../electron ../scripts
       ../tests/fixtures/sample-3page.pdf
+      ../core-plugins.json ../docs ../skills ../examples
+      (lib.fileset.unions (lib.concatMap (id:
+        map (name: lib.fileset.maybeMissing (../plugins + "/${id}/${name}")) [
+          "src" "scripts" "tests" "licenses" ".gitignore" "README.md" "LICENSE"
+          "THIRD-PARTY.md" "FSRS-LICENSE.txt" "manifest.json" "package.json" "package-lock.json" "tsconfig.json"
+        ]) [ "flashcards" "coding-questions" "drawing-pad" "rich-code-blocks" "ui-showcase" ]))
       ../package.json ../package-lock.json ../config.ts ../next.config.ts
       ../tsconfig.json ../next-env.d.ts ../postcss.config.mjs ../proxy.ts
       ../LICENSE
     ];
   };
-  npmDepsHash = "sha256-+OlIwC9UD7T15Z03IJjF2cNt9wk0/kqcBbviylWdRIA=";
+  npmDepsHash = "sha256-ink0rVziD1xk3dVq9ORWXIe03ISSlpDuBfXtzDBBNbA=";
   nativeBuildInputs = [ makeWrapper autoPatchelfHook ];
   buildInputs = [ stdenv.cc.cc.lib fontconfig ];
   ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
   NEXT_TELEMETRY_DISABLED = "1";
   LD_LIBRARY_PATH = lib.makeLibraryPath [ stdenv.cc.cc.lib fontconfig ];
+
+  buildPhase = ''
+    runHook preBuild
+    mkdir -p core-plugins
+    ${lib.concatStringsSep "\n" (map (id: "cp -r ${plugins.${id}} core-plugins/${id}") (builtins.fromJSON (builtins.readFile ../core-plugins.json)))}
+    node --input-type=module -e 'import {validateCorePackages} from "./scripts/build-core-plugins.mjs"; validateCorePackages(process.cwd(), "core-plugins")'
+    npm run plugins:build-authoring
+    # Plugins are separately bundled packages; their authoring sources are not app entrypoints.
+    node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("tsconfig.json")); p.exclude=[...(p.exclude ?? []), "plugins"]; fs.writeFileSync("tsconfig.json",JSON.stringify(p));'
+    node_modules/.bin/next build
+    runHook postBuild
+  '';
 
   preBuild = ''
     mkdir -p app/nix-fonts

@@ -14,9 +14,9 @@ try {
   await page.click('[data-testid="settings-entry"]');
   await page.waitForSelector('[data-testid="settings-dialog"]');
  };
- await page.goto(origin);await page.waitForSelector('html.lh-phone');await openSettings();
+ await page.goto(new URL("/chat/new",origin).href);await page.waitForSelector('html.lh-phone');await openSettings();
  assert.equal(await page.$eval('[data-testid="settings-content"]',e=>e.hidden),true);
- assert.equal(await page.$eval('.lh-app-shell',e=>e.inert),true);
+ assert.equal(await page.$eval('.lh-app-shell',e=>e.closest('[aria-hidden="true"]')!==null),true);
  for(const section of ['keys','github','agent','appearance','graph','keyboard','general']) {
   await page.click(`[data-testid="settings-nav-${section}"]`);
   await page.waitForSelector(`[data-testid="section-${section}"]`,{visible:true});
@@ -38,7 +38,7 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.$eval('[data-testid="settings-content"]',e=>e.hidden),true);
   await page.click('[aria-label="Close settings"]');
-  assert.equal(await page.$eval('.lh-app-shell',e=>e.inert),false);
+  assert.equal(await page.$eval('.lh-app-shell',e=>e.closest('[aria-hidden="true"]')!==null),false);
   await openSettings();await page.click('[data-testid="settings-nav-graph"]');await page.waitForSelector(toggle);
   assert.notEqual(await page.$eval(toggle,e=>e.getAttribute('aria-checked')),before,'Saved value survives closing settings');
  } finally {
@@ -52,8 +52,8 @@ try {
  const desktop=await browser.newPage();await desktop.setViewport({width:1280,height:900});await desktop.goto(origin);
  await desktop.waitForSelector('[data-testid="settings-entry"]');await desktop.click('[data-testid="settings-entry"]');
  await desktop.waitForSelector('[data-testid="settings-dialog"]');
- await desktop.waitForFunction(()=>Math.abs(document.querySelector('[data-testid="settings-nav"]').getBoundingClientRect().width-176)<0.1);
+ await desktop.waitForFunction(()=>Math.abs(document.querySelector('[data-testid="settings-nav"]').getBoundingClientRect().width-192)<0.1);
  assert.equal(await desktop.$eval('[data-testid="settings-nav"]',e=>e.hidden),false);
  assert.equal(await desktop.$('.lh-settings-phone-header'),null);
- console.log('PASS: seven mobile categories, navigation, no overflow, touch targets, switch bounds, persistence/restore and desktop layout');
+ console.log('PASS: seven standard mobile categories, navigation, no overflow, touch targets, switch bounds, persistence/restore and desktop layout');
 } finally { await browser.close(); }

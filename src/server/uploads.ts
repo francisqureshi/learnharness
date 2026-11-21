@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { PATHS } from "../../config.ts";
 import { MAX_UPLOAD_BYTES } from "../../lib/upload-limits.ts";
-import { desktopAPIAuthorized } from "./desktop-access.ts";
+import { apiRequestRefusal } from "./desktop-access.ts";
 import { subscriptionRequestOrigin } from "./web-subscription-http.ts";
 
 const state = globalThis as typeof globalThis & { lhActiveUploads?: number };
@@ -11,7 +11,8 @@ const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosnif
 function error(message: string, status: number) { return Response.json({ error: message }, { status, headers }); }
 
 export function uploadsStatusResponse(request: Request) {
-	if (!desktopAPIAuthorized(request.headers)) return error("Desktop API access requires the trusted LearnHarness window.", 403);
+	const refusal = apiRequestRefusal(request);
+	if (refusal) return error(refusal, 403);
 	return Response.json({ enabled: process.env.LH_SHARED_SERVER === "1", active: activeUploads() }, { headers });
 }
 
@@ -19,7 +20,8 @@ export function uploadsStatusResponse(request: Request) {
  * publish a reference only after closing and atomically renaming the file.
  * Same-origin protection complements the deployment's private network gate. */
 export async function uploadResponse(request: Request, root = path.join(PATHS.data, "uploads")): Promise<Response> {
-	if (!desktopAPIAuthorized(request.headers)) return error("Desktop API access requires the trusted LearnHarness window.", 403);
+	const refusal = apiRequestRefusal(request);
+	if (refusal) return error(refusal, 403);
 	if (process.env.LH_SHARED_SERVER !== "1") return error("Uploads are unavailable on this server.", 404);
 	const origin = subscriptionRequestOrigin(request);
 	if (!origin || request.headers.get("origin") !== origin || request.headers.get("x-learnharness-upload") !== "1" || request.headers.get("sec-fetch-site") === "cross-site") return error("Upload files from LearnHarness.", 403);

@@ -15,6 +15,11 @@ in {
       default = 3100;
       description = "Loopback HTTP port; expose only through a private authenticated proxy.";
     };
+    allowedHosts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Hostnames of private reverse proxies allowed to reach the API (without scheme or port).";
+    };
     chatgptCallbackPort = lib.mkOption {
       type = lib.types.port;
       default = 1455;
@@ -39,6 +44,7 @@ in {
         PORT = toString cfg.port;
         LH_CHATGPT_CALLBACK_PORT = toString cfg.chatgptCallbackPort;
         LH_SHARED_SERVER = "1";
+        LH_ALLOWED_HOSTS = lib.concatStringsSep "," cfg.allowedHosts;
         LH_DATA_DIR = "/var/lib/learnharness/data";
         LH_AUTH_FILE = "/var/lib/learnharness/auth.json";
         XDG_CACHE_HOME = "/var/cache/learnharness";

@@ -6,7 +6,7 @@ import path from "node:path";
 import { uploadResponse, activeUploads, uploadsStatusResponse } from "../src/server/uploads.ts";
 import { MAX_UPLOAD_BYTES } from "../lib/upload-limits.ts";
 
-const origin = "https://hws.tail0d91b.ts.net:10443";
+const origin = "http://127.0.0.1:3100";
 function request(name: string, body: BodyInit = "lesson fixture", overrides: Record<string, string> = {}) {
 	return new Request(`${origin}/api/uploads`, { method: "POST", body, duplex: "half", headers: {
 		origin, "x-learnharness-upload": "1", "x-file-name": encodeURIComponent(name), ...overrides,
